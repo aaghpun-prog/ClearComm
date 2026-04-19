@@ -37,17 +37,6 @@ ClearComm employs a modular ML architecture, caching weights locally and utilizi
 
 ---
 
-## 📸 Screenshots
-*(Add screenshots of your application interfaces here)*
-
-![ClearComm Dashboard Placeholder](/docs/placeholder1.png)
-*Figure 1: The main diagnostic dashboard for text analysis.*
-
-![Homonym Detection Placeholder](/docs/placeholder2.png)
-*Figure 2: Real-time context disambiguation in action.*
-
----
-
 ## 🚀 Installation & Setup
 
 ### Prerequisites
