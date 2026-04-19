@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CLEARCOMM - Advanced Clarity Suite</title>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            margin: 0;
+            padding: 40px 20px;
+            color: var(--text-main);
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--surface);
+            border-radius: 16px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+        }
+
+        .header {
+            padding: 30px;
+            text-align: center;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(to right, #ffffff, #f8fafc);
+        }
+
+        .header h1 {
+            margin: 0;
+            color: var(--primary);
+            font-size: 2.5rem;
+            letter-spacing: -0.05em;
+        }
+
+        .header p {
+            margin: 10px 0 0 0;
+            color: var(--text-muted);
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 20px;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            padding: 20px 30px;
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-main);
+        }
+
+        .tab-btn.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .tab-content {
+            display: none;
+            padding: 40px;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(5px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Inputs and Components */
+        textarea {
+            width: 100%;
+            height: 180px;
+            padding: 16px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 1rem;
+            color: var(--text-main);
+            resize: vertical;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+            margin-bottom: 20px;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            padding: 10px 15px;
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            font-size: 1rem;
+            width: 120px;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        button.action-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.1s, background 0.2s;
+            box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);
+        }
+
+        button.action-btn:hover {
+            background: var(--primary-hover);
+        }
+
+        button.action-btn:active {
+            transform: scale(0.98);
+        }
+
+        button.action-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .loader {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+            color: var(--primary);
+            font-weight: 500;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(79, 70, 229, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Output Cards */
+        .output-card {
+            margin-top: 30px;
+            padding: 24px;
+            background: #f8fafc;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            display: none;
+        }
+
+        .output-card h3 {
+            margin-top: 0;
+            color: var(--text-main);
+        }
+
+        .json-block {
+            padding: 16px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            overflow-x: auto;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>CLEARCOMM</h1>
+            <p>Advanced Suite for Text Clarity & Generation</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('tab-length', this)">1. Length Control</button>
+            <button class="tab-btn" onclick="switchTab('tab-homonym', this)">2. Homonym Detector</button>
+            <button class="tab-btn" onclick="switchTab('tab-infogap', this)">3. Info Gap Detector</button>
+        </div>
+
+        <!-- TAB 1: Length Control -->
+        <div id="tab-length" class="tab-content active">
+            <h2>Rewrite to Target length</h2>
+            <p style="color: var(--text-muted); margin-bottom: 20px;">Uses a local T5 transformer summarizing model to
+                compress text.</p>
+
+            <textarea id="len-text" placeholder="Enter paragraph to summarize..."></textarea>
+
+            <div class="form-group">
+                <label for="len-target">Target Word Count:</label>
+                <input type="number" id="len-target" value="50" min="5">
+            </div>
+
+            <button class="action-btn" id="len-btn" onclick="runAnalysis('length_control', 'len')">Rewrite Text</button>
+
+            <div class="loader" id="len-loader">
+                <div class="spinner"></div> Generating rewriting inference (may take a moment on CPU)...
+            </div>
+
+            <div class="output-card" id="len-out">
+                <h3>Result</h3>
+                <div class="json-block" id="len-json"></div>
+            </div>
+        </div>
+
+        <!-- TAB 2: Homonym Detector -->
+        <div id="tab-homonym" class="tab-content">
+            <h2>Identify Contextual Homonyms</h2>
+            <p style="color: var(--text-muted); margin-bottom: 20px;">AI Semantic Matching using SBERT
+                Sentence-Transformers and WordNet dictionaries.</p>
+
+            <textarea id="hom-text"
+                placeholder="Enter text (e.g. 'I sat on the river bank waiting for a fish', or 'I went to the bank to deposit my cash')"></textarea>
+
+            <button class="action-btn" id="hom-btn" onclick="runAnalysis('homonym_detector', 'hom')">Analyze
+                Context</button>
+
+            <div class="loader" id="hom-loader">
+                <div class="spinner"></div> Running SBERT Semantic Analysis...
+            </div>
+
+            <div class="output-card" id="hom-out">
+                <h3>Result</h3>
+                <div class="json-block" id="hom-json"></div>
+            </div>
+        </div>
+
+        <!-- TAB 3: Info Gap Detector -->
+        <div id="tab-infogap" class="tab-content">
+            <h2>Detect Missing Information</h2>
+            <p style="color: var(--text-muted); margin-bottom: 20px;">Uses spaCy limits + Zero-Shot classification
+                (BART) to detect missing conditions/deadlines.</p>
+
+            <textarea id="gap-text"
+                placeholder="Enter statements (e.g., 'Submit the final report to management.')"></textarea>
+
+            <button class="action-btn" id="gap-btn" onclick="runAnalysis('info_gap', 'gap')">Scan for Gaps</button>
+
+            <div class="loader" id="gap-loader">
+                <div class="spinner"></div> Classifying text semantics...
+            </div>
+
+            <div class="output-card" id="gap-out">
+                <h3>Result</h3>
+                <div class="json-block" id="gap-json"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function switchTab(tabId, btnElement) {
+            // Hide all contents
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            // Deactivate all buttons
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+
+            // Show new tab and activate btn
+            document.getElementById(tabId).classList.add('active');
+            btnElement.classList.add('active');
+        }
+
+        async function runAnalysis(endpoint, prefix) {
+            const textEl = document.getElementById(`${prefix}-text`);
+            const btnEl = document.getElementById(`${prefix}-btn`);
+            const loaderEl = document.getElementById(`${prefix}-loader`);
+            const outEl = document.getElementById(`${prefix}-out`);
+            const jsonEl = document.getElementById(`${prefix}-json`);
+
+            const text = textEl.value;
+            if (!text.trim()) {
+                alert("Please enter some text.");
+                return;
+            }
+
+            let targetCount = 50;
+            if (endpoint === 'length_control') {
+                targetCount = parseInt(document.getElementById('len-target').value) || 50;
+            }
+
+            btnEl.disabled = true;
+            loaderEl.style.display = 'flex';
+            outEl.style.display = 'none';
+            jsonEl.innerHTML = ''; // clear previous
+
+            try {
+                const response = await fetch(`/${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, target: targetCount })
+                });
+
+                const data = await response.json();
+                outEl.style.display = 'block';
+
+                if (data.error) {
+                    jsonEl.innerHTML = `<div style="color: #ef4444; padding: 10px; background: #fef2f2; border-radius: 6px;">Error: ${data.error}</div>`;
+                    return;
+                }
+
+                // Render dynamic rich output
+                let htmlOutput = '';
+
+                if (endpoint === 'length_control') {
+                    htmlOutput += `
+                        <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid var(--border);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                <h4 style="margin: 0; color: var(--text-muted);">Rewritten Text</h4>
+                                <span style="background: var(--primary); color: white; padding: 4px 10px; border-radius: 20px; font-size: 0.85em; font-weight: 600;">
+                                    Final Words: ${data.final_word_count}
+                                </span>
+                            </div>
+                            <p style="margin: 0; font-size: 1.1em; line-height: 1.6; color: var(--text-main);">${data.rewritten_text}</p>
+                        </div>
+                    `;
+                } else if (endpoint === 'homonym_detector') {
+                    if (data.homonyms && data.homonyms.length > 0) {
+                        data.homonyms.forEach(h => {
+                            htmlOutput += `
+                                <div style="background: white; padding: 15px; margin-bottom: 15px; border-radius: 8px; border-left: 4px solid var(--primary); display: flex; flex-direction: column; gap: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <strong>Word: <span style="color: var(--primary); font-size: 1.1em; text-transform: uppercase;">${h.word}</span></strong>
+                                        <span style="font-size: 0.8em; color: var(--text-muted); background: #f1f5f9; padding: 2px 8px; border-radius: 4px;">Confidence: ${h.confidence}</span>
+                                    </div>
+                                    <div style="color: var(--text-main); font-size: 1.05em;">Determined Meaning: <span style="font-weight: 600; color: #10b981;">${h.meaning}</span></div>
+                                </div>
+                             `;
+                        });
+                    } else {
+                        htmlOutput += `<div style="padding: 15px; background: #f0fdf4; color: #166534; border-radius: 8px;">No ambiguous homonyms detected in the text.</div>`;
+                    }
+                } else if (endpoint === 'info_gap') {
+                    if (data.gaps && data.gaps.length > 0) {
+                        data.gaps.forEach(g => {
+                            htmlOutput += `
+                                <div style="background: white; padding: 15px; margin-bottom: 15px; border-radius: 8px; border-left: 4px solid #ef4444; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                                    <div style="color: #b91c1c; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                                        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                        Missing: ${g.missing.toUpperCase()}
+                                    </div>
+                                    <div style="font-family: monospace; background: #f8fafc; padding: 8px; border-radius: 4px; border: 1px solid #e2e8f0; color: var(--text-muted);">
+                                        "...${g.sentence}..."
+                                    </div>
+                                </div>
+                            `;
+                        });
+                    } else {
+                        htmlOutput += `<div style="padding: 15px; background: #f0fdf4; color: #166534; border-radius: 8px;">No information gaps detected. Text seems complete.</div>`;
+                    }
+                }
+
+                jsonEl.innerHTML = htmlOutput;
+
+            } catch (error) {
+                alert('An error occurred. Make sure the server is running.');
+                console.error(error);
+                jsonEl.innerHTML = `<div style="color: #ef4444;">Error fetching from server.</div>`;
+                outEl.style.display = 'block';
+            } finally {
+                btnEl.disabled = false;
+                loaderEl.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+
+</html>
