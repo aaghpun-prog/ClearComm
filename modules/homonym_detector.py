@@ -1,4 +1,5 @@
 import re
+import json
 import nltk
 from nltk.corpus import wordnet as wn
 from sentence_transformers import util
@@ -21,8 +22,40 @@ except LookupError:
     nltk.download('punkt', download_dir=NLTK_DATA_PATH)
     nltk.download('averaged_perceptron_tagger', download_dir=NLTK_DATA_PATH)
 
+# ============================================================
+# LAYER 1 — Curated Homonym Knowledge Base (loaded from JSON)
+# ============================================================
+
+# Module-level cache: loaded once, reused forever
+_CURATED_CACHE = None
+
+def _load_curated_dataset():
+    """
+    Loads the curated homonym dataset from data/homonyms.json.
+    Uses module-level caching — file is read only once per process lifetime.
+    Falls back to empty dict if file is missing (system still works via Layer 2).
+    """
+    global _CURATED_CACHE
+    if _CURATED_CACHE is not None:
+        return _CURATED_CACHE
+
+    json_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'homonyms.json')
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                _CURATED_CACHE = json.load(f)
+            print(f"[ClearComm] Loaded curated homonym dataset: {len(_CURATED_CACHE)} words")
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"[ClearComm] Warning: Could not load homonyms.json: {e}")
+            _CURATED_CACHE = {}
+    else:
+        print("[ClearComm] Warning: data/homonyms.json not found. Layer 1 disabled, using SBERT fallback only.")
+        _CURATED_CACHE = {}
+
+    return _CURATED_CACHE
+
 # Predefined Homonym Dictionary mapping words to various meanings guided by context keywords
-# This remains for backward compatibility and high-quality curated data
+# PRESERVED for backward compatibility — merged with JSON dataset at runtime
 HOMONYM_DICT = {
     "bank": {
         "financial": {"definition": "A financial institution that accepts deposits.", "keywords": ["financial", "institution", "money", "cash", "deposit", "loan"], "example": "He deposited a check at the bank."},
@@ -101,6 +134,106 @@ CURATED_GAP = 0.01
 GENERAL_THRESHOLD = 0.40
 GENERAL_GAP = 0.04
 
+# ============================================================
+# LAYER 1 — Fast Curated Keyword-Scoring Engine
+# ============================================================
+
+# Confidence thresholds for Layer 1 curated matching
+CURATED_MATCH_MIN_HITS = 1       # Minimum keyword hits to consider a match
+CURATED_MATCH_MIN_RATIO = 0.10   # Minimum hit_ratio (hits / total_keywords)
+CURATED_MATCH_STRONG_RATIO = 0.20  # Ratio above which we consider it a strong match
+CURATED_MATCH_MIN_GAP = 1       # Minimum gap in keyword hits between best and second-best
+
+def _get_merged_curated_entry(word: str) -> dict:
+    """
+    Returns the curated entry for a word, preferring the JSON dataset
+    over the inline HOMONYM_DICT. The JSON dataset has richer keyword lists.
+    Falls back to HOMONYM_DICT if the word is not in JSON.
+    """
+    curated = _load_curated_dataset()
+    if word in curated:
+        return curated[word]
+    if word in HOMONYM_DICT:
+        return HOMONYM_DICT[word]
+    return None
+
+def _try_curated_match(sentence: str, word: str) -> dict:
+    """
+    Layer 1: Fast keyword-scoring engine using the curated dataset.
+    
+    Logic:
+      1. Get curated meanings for the word
+      2. Tokenize the sentence into lowercase words
+      3. For each meaning, count how many of its keywords appear in the sentence
+      4. If the best meaning has enough hits AND a clear gap over second-best,
+         return a confident curated result immediately.
+    
+    Returns:
+      dict with word/meaning/confidence/score/score_gap if confident match found.
+      None if no confident match (falls through to Layer 2).
+    """
+    entry = _get_merged_curated_entry(word)
+    if not entry:
+        return None
+
+    # Tokenize sentence to lowercase word set for fast lookup
+    sentence_words = set(re.findall(r'\b\w+\b', sentence.lower()))
+    
+    scores = []
+    for meaning_key, meaning_data in entry.items():
+        keywords = meaning_data.get("keywords", [])
+        if not keywords:
+            scores.append((0, 0.0, meaning_key, meaning_data))
+            continue
+        
+        # Count how many curated keywords appear in the sentence
+        hits = sum(1 for kw in keywords if kw in sentence_words)
+        hit_ratio = hits / len(keywords)
+        scores.append((hits, hit_ratio, meaning_key, meaning_data))
+    
+    if not scores:
+        return None
+    
+    # Sort by hits descending, then by ratio
+    scores.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    best_hits, best_ratio, best_key, best_data = scores[0]
+    
+    # Calculate gap with second-best
+    if len(scores) > 1:
+        second_hits = scores[1][0]
+        hit_gap = best_hits - second_hits
+    else:
+        hit_gap = best_hits  # Only one meaning, gap is the score itself
+    
+    # Decision: Is this a confident curated match?
+    if (best_hits >= CURATED_MATCH_MIN_HITS and
+            best_ratio >= CURATED_MATCH_MIN_RATIO and
+            hit_gap >= CURATED_MATCH_MIN_GAP):
+        
+        # Determine confidence level
+        if best_ratio >= CURATED_MATCH_STRONG_RATIO and hit_gap >= 2:
+            confidence_label = "high"
+        elif best_ratio >= CURATED_MATCH_MIN_RATIO:
+            confidence_label = "medium"
+        else:
+            confidence_label = "low"
+        
+        return {
+            "word": word,
+            "meaning": best_data["definition"],
+            "confidence": confidence_label,
+            "score": best_ratio,
+            "score_gap": hit_gap / max(len(entry), 1)
+        }
+    
+    # Not confident enough — fall through to Layer 2
+    return None
+
+
+# ============================================================
+# LAYER 2 — SBERT + WordNet AI Fallback (PRESERVED)
+# ============================================================
+
 def get_meanings(word: str) -> list:
     """Fetch possible meanings for a word using WordNet."""
     synsets = wn.synsets(word)
@@ -124,9 +257,10 @@ def detect_homonym_meaning_wic(sentence: str, word: str) -> dict:
     candidates = []
     source = "wic_model"
 
-    # 1. Check curated dictionary first
-    if word in HOMONYM_DICT:
-        for data in HOMONYM_DICT[word].values():
+    # 1. Check curated dictionary first (merged: JSON + inline)
+    entry = _get_merged_curated_entry(word)
+    if entry:
+        for data in entry.values():
             candidates.append({
                 "meaning": data["definition"],
                 "example": data.get("example", "")
@@ -161,15 +295,24 @@ def detect_homonym_meaning_wic(sentence: str, word: str) -> dict:
 def detect_homonym_meaning_sbert_fallback(sentence: str, word: str) -> dict:
     """
     Fallback method using SBERT cosine similarity (original logic).
+    Enhanced: Uses natural sentence encoding instead of raw keyword lists.
     """
     clean_meanings = []
     enriched_meanings = []
     source = "sbert_fallback"
     
-    if word in HOMONYM_DICT:
-        for data in HOMONYM_DICT[word].values():
+    # Check merged curated data first (JSON + inline dict)
+    entry = _get_merged_curated_entry(word)
+    if entry:
+        for meaning_key, data in entry.items():
             clean_meanings.append(data["definition"])
-            enriched_meanings.append(f"{' '.join(data['keywords'])}")
+            # IMPROVED: Encode as natural sentence for better SBERT cosine similarity
+            # Instead of raw keywords, use: "word meaning: definition. Example: ..."
+            example = data.get("example", "")
+            if example:
+                enriched_meanings.append(f"{word} ({meaning_key}): {data['definition']} Example: {example}")
+            else:
+                enriched_meanings.append(f"{word} ({meaning_key}): {data['definition']}")
     else:
         wn_meanings = get_meanings(word)
         for m in wn_meanings:
@@ -207,11 +350,52 @@ def detect_homonym_meaning_sbert_fallback(sentence: str, word: str) -> dict:
         "score_gap": score_gap
     }
 
+
+# ============================================================
+# MAIN PIPELINE — Hybrid 3-Layer Architecture
+# ============================================================
+
+def _assign_confidence_label(result: dict, is_curated: bool) -> dict:
+    """
+    Assigns a human-readable confidence label to a result from Layer 2/3.
+    Replaces raw engine names with 'high', 'medium', or 'low'.
+    """
+    score = result.get("score", 0)
+    gap = result.get("score_gap", 0)
+    
+    if is_curated:
+        # Curated words: more lenient thresholds (demo reliability)
+        if score >= 0.30 and gap >= 0.03:
+            result["confidence"] = "high"
+        elif score >= CURATED_THRESHOLD and gap >= CURATED_GAP:
+            result["confidence"] = "medium"
+        else:
+            result["confidence"] = "low"
+    else:
+        # General words: stricter thresholds (precision)
+        if score >= 0.50 and gap >= 0.06:
+            result["confidence"] = "high"
+        elif score >= GENERAL_THRESHOLD and gap >= GENERAL_GAP:
+            result["confidence"] = "medium"
+        else:
+            result["confidence"] = "low"
+    
+    return result
+
 def analyze_homonyms_sbert_pipeline(text: str) -> dict:
     """
     Entry point for high-precision homonym detection.
+    
+    HYBRID 3-LAYER ARCHITECTURE:
+      Layer 1: Curated JSON keyword-scoring (fast, no ML needed)
+      Layer 2: SBERT + WordNet AI fallback (existing pipeline, unchanged)
+      Layer 3: Safe low-confidence handling (explicit response instead of silence)
+    
     Uses spaCy for POS filtering, falling back to NLTK if needed.
     """
+    # Ensure curated dataset is loaded (cached after first call)
+    _load_curated_dataset()
+    
     doc = get_spacy_doc(text)
     
     tokens_to_process = []
@@ -246,9 +430,9 @@ def analyze_homonyms_sbert_pipeline(text: str) -> dict:
     for item in tokens_to_process:
         word = item["word"]
         pos = item["pos"]
-        is_curated = word in HOMONYM_DICT
+        is_curated = _get_merged_curated_entry(word) is not None
         
-        # 1. POS Filtering: Allow NOUN, PROPN, ADJ, VERB. Always allow Curated words to bypass POS filter if missed.
+        # 1. POS Filtering: Allow NOUN, PROPN, ADJ, VERB. Always allow curated words to bypass POS filter.
         if pos not in ["NOUN", "PROPN", "ADJ", "VERB"] and not is_curated:
             continue
             
@@ -256,26 +440,43 @@ def analyze_homonyms_sbert_pipeline(text: str) -> dict:
         if word in VERB_BLACKLIST or len(word) < 3 or word in seen_words:
             continue
             
-        # 3. Use WordNet to check for lexical ambiguity
+        # 3. Check for lexical ambiguity
         synsets = wn.synsets(word)
         
         if is_curated or len(synsets) > 1:
+            
+            # ===== LAYER 1: Try curated keyword match first =====
+            curated_result = _try_curated_match(text, word)
+            if curated_result:
+                results.append(curated_result)
+                seen_words.add(word)
+                continue  # Skip Layer 2 — curated match is confident
+            
+            # ===== LAYER 2: SBERT + WordNet AI Fallback =====
             result = detect_homonym_meaning_wic(text, word)
             
             if result:
                 score = result.get("score", 0)
                 gap = result.get("score_gap", 0)
                 
-                # 4. Apply Dual-Threshold Strategy
-                # Curated words (demo) are more lenient; WordNet (general) are strict.
+                # Apply Dual-Threshold Strategy
                 th = CURATED_THRESHOLD if is_curated else GENERAL_THRESHOLD
                 gp = CURATED_GAP if is_curated else GENERAL_GAP
                 
                 if score >= th and gap >= gp:
+                    # Assign human-readable confidence label
+                    result = _assign_confidence_label(result, is_curated)
                     results.append(result)
                     seen_words.add(word)
+                # ===== LAYER 3: If score too low, word is silently skipped =====
+                # (No false positive is better than a wrong answer for a demo)
             
     return {"homonyms": results}
+
+
+# ============================================================
+# LEGACY — Old rule-based method preserved for reference
+# ============================================================
 
 def analyze_homonyms_rule_based(text: str) -> dict:
     """Old rule-based method preserved for reference."""

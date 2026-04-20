@@ -13,3 +13,7 @@ nltk_data/
 *.log
 .DS_Store
 tmp_pip_dir/
+.cache/
+*.egg-info/
+dist/
+build/

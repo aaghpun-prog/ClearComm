@@ -1,0 +1,544 @@
+{
+  "bank": {
+    "financial": {
+      "definition": "A financial institution that accepts deposits and provides loans.",
+      "keywords": ["money", "deposit", "loan", "account", "cash", "financial", "savings", "withdraw", "atm", "credit"],
+      "example": "I deposited money in the bank."
+    },
+    "river": {
+      "definition": "The sloping land alongside a body of water.",
+      "keywords": ["river", "water", "stream", "shore", "mud", "edge", "sat", "fishing", "flood", "creek"],
+      "example": "We sat near the river bank."
+    }
+  },
+  "bat": {
+    "animal": {
+      "definition": "A nocturnal flying mammal that uses echolocation.",
+      "keywords": ["fly", "flying", "night", "cave", "wings", "animal", "mammal", "nocturnal", "vampire", "echolocation"],
+      "example": "The bat flew at night."
+    },
+    "sports": {
+      "definition": "A club or stick used for hitting a ball in sports like cricket or baseball.",
+      "keywords": ["hit", "ball", "cricket", "baseball", "swing", "game", "sports", "wooden", "innings", "pitch"],
+      "example": "He hit the ball with a bat."
+    }
+  },
+  "match": {
+    "contest": {
+      "definition": "A competitive game or contest between two sides.",
+      "keywords": ["game", "contest", "win", "lose", "football", "tennis", "score", "team", "play", "tournament"],
+      "example": "The football match ended in a draw."
+    },
+    "fire_starter": {
+      "definition": "A short thin stick tipped with a chemical that ignites when struck.",
+      "keywords": ["fire", "light", "burn", "strike", "flame", "box", "ignite", "candle", "smoke", "stick"],
+      "example": "He struck a match to light the candle."
+    }
+  },
+  "left": {
+    "direction": {
+      "definition": "The side of the body to the west when facing north; opposite of right.",
+      "keywords": ["turn", "right", "direction", "side", "hand", "signal", "corner", "lane", "opposite"],
+      "example": "Turn left at the signal."
+    },
+    "departed": {
+      "definition": "Past tense of leave; went away from a place.",
+      "keywords": ["leave", "go", "went", "early", "home", "office", "depart", "already", "ago", "yesterday"],
+      "example": "She left early."
+    }
+  },
+  "right": {
+    "direction": {
+      "definition": "The side opposite to left; toward the east when facing north.",
+      "keywords": ["left", "turn", "direction", "side", "hand", "corner", "lane", "opposite"],
+      "example": "Take a right turn at the intersection."
+    },
+    "correct": {
+      "definition": "True, correct, or morally proper.",
+      "keywords": ["correct", "true", "wrong", "answer", "proper", "moral", "just", "decision", "accurate"],
+      "example": "That is the right answer."
+    }
+  },
+  "file": {
+    "document": {
+      "definition": "A collection of documents or data stored together; to organize records.",
+      "keywords": ["report", "document", "paper", "folder", "cabinet", "computer", "data", "record", "submit", "organize"],
+      "example": "Please file the report."
+    },
+    "tool": {
+      "definition": "A hand tool with a rough surface used for smoothing or shaping materials.",
+      "keywords": ["smooth", "edge", "tool", "metal", "nail", "shape", "wood", "rough", "sand", "sharpen"],
+      "example": "Use a file to smooth the edge."
+    }
+  },
+  "ring": {
+    "jewelry": {
+      "definition": "A small circular band worn on a finger as ornament or symbol.",
+      "keywords": ["finger", "gold", "diamond", "wear", "jewelry", "wedding", "engagement", "silver", "band"],
+      "example": "She wore a beautiful diamond ring."
+    },
+    "sound": {
+      "definition": "To make a clear resonant or vibrating sound.",
+      "keywords": ["bell", "phone", "sound", "hear", "doorbell", "call", "alarm", "tone", "loud"],
+      "example": "I heard the phone ring."
+    }
+  },
+  "light": {
+    "illumination": {
+      "definition": "Electromagnetic radiation that makes things visible; a source of illumination.",
+      "keywords": ["bright", "sun", "shine", "dark", "lamp", "bulb", "glow", "switch", "beam", "ray"],
+      "example": "Turn on the light."
+    },
+    "weight": {
+      "definition": "Having little weight; not heavy.",
+      "keywords": ["heavy", "feather", "carry", "weight", "easy", "portable", "thin", "lift"],
+      "example": "The suitcase is very light."
+    }
+  },
+  "watch": {
+    "observe": {
+      "definition": "To look at or observe something attentively over time.",
+      "keywords": ["look", "see", "movie", "observe", "screen", "television", "show", "carefully", "video", "film"],
+      "example": "Let us watch the movie together."
+    },
+    "timepiece": {
+      "definition": "A small portable timepiece typically worn on the wrist.",
+      "keywords": ["wrist", "time", "clock", "wear", "gold", "strap", "hour", "digital", "analog", "bracelet"],
+      "example": "He checked his watch for the time."
+    }
+  },
+  "seal": {
+    "animal": {
+      "definition": "A fish-eating aquatic mammal with flippers that lives in cold waters.",
+      "keywords": ["animal", "ocean", "swim", "fish", "flippers", "water", "ice", "arctic", "pup", "marine"],
+      "example": "The seal was resting on the ice."
+    },
+    "closure": {
+      "definition": "A device or substance used to close or secure something tightly.",
+      "keywords": ["close", "envelope", "wax", "tight", "container", "leak", "stamp", "secure", "package", "open"],
+      "example": "Break the seal to open the package."
+    }
+  },
+  "key": {
+    "lock_opener": {
+      "definition": "A shaped piece of metal used to open or close a lock.",
+      "keywords": ["door", "open", "lock", "metal", "car", "house", "unlock", "chain", "lost", "pocket"],
+      "example": "I lost the house key."
+    },
+    "crucial": {
+      "definition": "Of crucial importance; essential to achieving something.",
+      "keywords": ["important", "crucial", "success", "essential", "factor", "main", "critical", "vital", "role"],
+      "example": "Hard work is the key to success."
+    }
+  },
+  "park": {
+    "recreation": {
+      "definition": "A large public area of land used for recreation with grass, trees, and paths.",
+      "keywords": ["green", "grass", "play", "children", "tree", "walk", "picnic", "garden", "bench", "nature"],
+      "example": "Children played in the park."
+    },
+    "vehicle": {
+      "definition": "To bring a vehicle to a halt and leave it temporarily in a place.",
+      "keywords": ["car", "vehicle", "drive", "lot", "garage", "outside", "space", "parking", "spot", "street"],
+      "example": "Please park the car outside."
+    }
+  },
+  "current": {
+    "present_time": {
+      "definition": "Belonging to the present time; happening or existing now.",
+      "keywords": ["now", "present", "today", "modern", "recent", "existing", "latest", "ongoing", "affairs"],
+      "example": "Current events are concerning."
+    },
+    "flow": {
+      "definition": "A continuous flow of water, air, or electricity in a definite direction.",
+      "keywords": ["water", "river", "ocean", "flow", "electric", "strong", "stream", "electricity", "circuit", "waves"],
+      "example": "The ocean current was very strong."
+    }
+  },
+  "spring": {
+    "season": {
+      "definition": "The season between winter and summer when plants begin to grow.",
+      "keywords": ["season", "summer", "winter", "bloom", "flowers", "warm", "april", "march", "garden"],
+      "example": "Flowers bloom in the spring."
+    },
+    "coil": {
+      "definition": "An elastic device, typically a metal coil, that returns to shape after compression.",
+      "keywords": ["coil", "metal", "bounce", "bed", "mattress", "jump", "elastic", "mechanism", "tension"],
+      "example": "The mattress spring is broken."
+    },
+    "water_source": {
+      "definition": "A natural source where water flows out from the ground.",
+      "keywords": ["water", "source", "fresh", "mountain", "natural", "drink", "underground", "hot"],
+      "example": "We drank from a mountain spring."
+    }
+  },
+  "crane": {
+    "bird": {
+      "definition": "A tall, long-legged, long-necked wading bird.",
+      "keywords": ["bird", "fly", "animal", "neck", "water", "tall", "migrate", "feather", "wetland", "flock"],
+      "example": "The crane flew gracefully over the lake."
+    },
+    "machine": {
+      "definition": "A large, tall machine used for moving heavy objects by lifting and lowering them.",
+      "keywords": ["machine", "heavy", "lift", "build", "construction", "steel", "tower", "site", "raise", "load"],
+      "example": "The construction crane lifted the steel beams."
+    }
+  },
+  "duck": {
+    "bird": {
+      "definition": "A waterbird with a broad flat bill, short legs, and webbed feet.",
+      "keywords": ["bird", "water", "quack", "pond", "feather", "swim", "lake", "waddle", "beak", "mallard"],
+      "example": "The duck swam across the pond."
+    },
+    "action": {
+      "definition": "To lower the head or body quickly to avoid something.",
+      "keywords": ["dodge", "head", "avoid", "low", "down", "hide", "crouch", "bend", "quick", "beneath"],
+      "example": "Duck down to avoid the low beam."
+    }
+  },
+  "bark": {
+    "tree": {
+      "definition": "The tough outer covering of the trunk and branches of a tree.",
+      "keywords": ["tree", "trunk", "wood", "rough", "peel", "outer", "layer", "oak", "birch", "thick"],
+      "example": "The bark of the old oak was rough."
+    },
+    "dog_sound": {
+      "definition": "The sharp explosive sound made by a dog.",
+      "keywords": ["dog", "loud", "sound", "noise", "puppy", "growl", "night", "hear", "howl", "pet"],
+      "example": "The dog began to bark at strangers."
+    }
+  },
+  "nail": {
+    "fastener": {
+      "definition": "A small metal spike with a broadened flat head, hammered into wood to join things.",
+      "keywords": ["hammer", "wood", "metal", "wall", "hit", "board", "construction", "screw", "hang", "drive"],
+      "example": "He hammered a nail into the wall."
+    },
+    "body_part": {
+      "definition": "The horny covering on the upper surface of the tip of a finger or toe.",
+      "keywords": ["finger", "toe", "paint", "polish", "cut", "trim", "hand", "manicure", "grow", "clip"],
+      "example": "She painted her nails red."
+    }
+  },
+  "date": {
+    "calendar": {
+      "definition": "A specific day of the month or year as expressed by a number.",
+      "keywords": ["day", "month", "year", "calendar", "today", "tomorrow", "schedule", "birth", "deadline", "appointment"],
+      "example": "What is today's date?"
+    },
+    "fruit": {
+      "definition": "A sweet, dark brown oval fruit with a hard stone inside.",
+      "keywords": ["fruit", "sweet", "eat", "palm", "dried", "food", "dessert", "snack", "sugar", "middle_east"],
+      "example": "She ate a date as a snack."
+    },
+    "romantic": {
+      "definition": "A social or romantic appointment or outing with another person.",
+      "keywords": ["dinner", "romantic", "person", "meet", "evening", "restaurant", "couple", "movie", "love", "together"],
+      "example": "They went on a date last night."
+    }
+  },
+  "can": {
+    "container": {
+      "definition": "A cylindrical metal container for food or drinks.",
+      "keywords": ["tin", "metal", "food", "drink", "soda", "open", "container", "aluminum", "soup", "beer"],
+      "example": "He opened a can of soda."
+    },
+    "ability": {
+      "definition": "To be able to; to have the ability or capacity to do something.",
+      "keywords": ["able", "ability", "possible", "capable", "skill", "could", "manage", "achieve", "know"],
+      "example": "She can speak three languages."
+    }
+  },
+  "fly": {
+    "insect": {
+      "definition": "A small winged insect, often considered a pest.",
+      "keywords": ["insect", "bug", "buzz", "swat", "pest", "kitchen", "annoying", "wings", "crawl"],
+      "example": "A fly was buzzing around the kitchen."
+    },
+    "travel_air": {
+      "definition": "To move through the air using wings or in an aircraft.",
+      "keywords": ["air", "plane", "bird", "sky", "travel", "airport", "pilot", "soar", "kite", "helicopter"],
+      "example": "We will fly to Paris tomorrow."
+    }
+  },
+  "rock": {
+    "stone": {
+      "definition": "A solid mineral material forming part of the earth's surface.",
+      "keywords": ["stone", "hard", "cliff", "mountain", "ground", "boulder", "pebble", "mineral", "geology", "throw"],
+      "example": "He sat on a large rock by the river."
+    },
+    "music": {
+      "definition": "A genre of popular music with a strong beat, typically played with electric guitars.",
+      "keywords": ["music", "band", "guitar", "concert", "song", "roll", "genre", "metal", "stage", "loud"],
+      "example": "She loves listening to rock music."
+    },
+    "motion": {
+      "definition": "To move gently back and forth or from side to side.",
+      "keywords": ["sway", "cradle", "baby", "chair", "gentle", "back", "forth", "boat", "swing", "rocking"],
+      "example": "She rocked the baby to sleep."
+    }
+  },
+  "wave": {
+    "water_wave": {
+      "definition": "A long body of water curling and breaking on the shore.",
+      "keywords": ["ocean", "sea", "water", "beach", "surf", "shore", "tide", "crash", "swim", "surfing"],
+      "example": "The waves crashed against the shore."
+    },
+    "gesture": {
+      "definition": "To move one's hand to and fro in greeting or as a signal.",
+      "keywords": ["hand", "hello", "goodbye", "greeting", "signal", "motion", "friendly", "gesture", "people"],
+      "example": "She waved goodbye from the window."
+    }
+  },
+  "train": {
+    "vehicle": {
+      "definition": "A series of connected railway carriages pulled by a locomotive.",
+      "keywords": ["railway", "station", "track", "ride", "passenger", "locomotive", "platform", "ticket", "rail", "commute"],
+      "example": "The train arrived at the station on time."
+    },
+    "practice": {
+      "definition": "To teach or learn a particular skill or behavior through practice.",
+      "keywords": ["practice", "learn", "exercise", "coach", "skill", "gym", "athlete", "prepare", "teach", "fitness"],
+      "example": "He trains every day for the marathon."
+    }
+  },
+  "strike": {
+    "hit": {
+      "definition": "To hit forcibly and deliberately with one's hand or a weapon.",
+      "keywords": ["hit", "blow", "punch", "force", "attack", "ball", "impact", "hard", "swing"],
+      "example": "He struck the ball with great force."
+    },
+    "protest": {
+      "definition": "An organized refusal to work as a form of protest.",
+      "keywords": ["work", "protest", "union", "workers", "refuse", "demand", "wages", "labor", "walkout", "picket"],
+      "example": "The workers went on strike for better wages."
+    }
+  },
+  "letter": {
+    "mail": {
+      "definition": "A written or printed message sent by mail or delivered to someone.",
+      "keywords": ["mail", "send", "write", "post", "envelope", "stamp", "receive", "address", "read", "message"],
+      "example": "I received a letter from my friend."
+    },
+    "alphabet": {
+      "definition": "A character representing a sound in an alphabet.",
+      "keywords": ["alphabet", "word", "character", "spell", "vowel", "consonant", "capital", "font", "write", "abc"],
+      "example": "The letter A is the first in the alphabet."
+    }
+  },
+  "fair": {
+    "just": {
+      "definition": "Treating people equally and according to rules; just and reasonable.",
+      "keywords": ["just", "equal", "honest", "reasonable", "justice", "unfair", "rules", "judge", "impartial"],
+      "example": "The decision was fair to everyone."
+    },
+    "event": {
+      "definition": "A gathering of stalls and amusements for public entertainment.",
+      "keywords": ["carnival", "rides", "stalls", "fun", "games", "festival", "exhibition", "food", "tickets", "crowd"],
+      "example": "We went to the county fair last weekend."
+    }
+  },
+  "point": {
+    "location": {
+      "definition": "A particular spot, place, or position in an area or on a surface.",
+      "keywords": ["place", "spot", "location", "position", "map", "destination", "meeting", "starting", "mark"],
+      "example": "We agreed to meet at the same point."
+    },
+    "tip": {
+      "definition": "The tapered, sharp end of a tool, weapon, or other object.",
+      "keywords": ["sharp", "tip", "end", "needle", "pencil", "knife", "arrow", "blade", "edge"],
+      "example": "The point of the needle was very sharp."
+    },
+    "argument": {
+      "definition": "An idea, opinion, or piece of information put forward in a discussion.",
+      "keywords": ["argument", "idea", "opinion", "valid", "discuss", "make", "understand", "agree", "reason"],
+      "example": "She made an excellent point during the debate."
+    }
+  },
+  "row": {
+    "line": {
+      "definition": "A number of people or things arranged in a straight line.",
+      "keywords": ["line", "seat", "front", "back", "arranged", "straight", "column", "chairs", "students"],
+      "example": "They sat in the front row."
+    },
+    "argument": {
+      "definition": "A noisy quarrel or dispute.",
+      "keywords": ["fight", "quarrel", "argue", "dispute", "loud", "angry", "shouting", "conflict", "heated"],
+      "example": "The neighbors had a terrible row last night."
+    },
+    "boat": {
+      "definition": "To propel a boat through water using oars.",
+      "keywords": ["boat", "oar", "paddle", "lake", "water", "canoe", "river", "stroke", "kayak"],
+      "example": "Let us row across the lake."
+    }
+  },
+  "book": {
+    "reading": {
+      "definition": "A written or printed work consisting of bound pages.",
+      "keywords": ["read", "page", "story", "novel", "library", "author", "chapter", "cover", "publish", "literature"],
+      "example": "I am reading a fascinating book."
+    },
+    "reserve": {
+      "definition": "To arrange in advance to have or use something; to make a reservation.",
+      "keywords": ["reserve", "ticket", "hotel", "reservation", "appointment", "table", "flight", "advance", "online"],
+      "example": "Please book a table for two."
+    }
+  },
+  "volume": {
+    "sound_level": {
+      "definition": "The degree of loudness of a sound.",
+      "keywords": ["loud", "sound", "music", "quiet", "turn", "up", "down", "speaker", "noise", "mute"],
+      "example": "Please turn down the volume."
+    },
+    "book_series": {
+      "definition": "A single book forming part of a larger work or series.",
+      "keywords": ["book", "series", "edition", "publish", "encyclopedia", "issue", "collection", "tome"],
+      "example": "Volume two of the series is the best."
+    },
+    "space": {
+      "definition": "The amount of space that a substance or object occupies.",
+      "keywords": ["space", "capacity", "measure", "container", "liquid", "cubic", "size", "quantity", "fill"],
+      "example": "Calculate the volume of the cylinder."
+    }
+  },
+  "change": {
+    "alter": {
+      "definition": "To make or become different; to modify or transform.",
+      "keywords": ["different", "modify", "alter", "transform", "update", "new", "adjust", "improve", "revise"],
+      "example": "We need to change the plan."
+    },
+    "coins": {
+      "definition": "Coins as opposed to paper currency; money returned after payment.",
+      "keywords": ["coins", "money", "pocket", "loose", "dollar", "pay", "return", "cashier", "small"],
+      "example": "Do you have change for a dollar?"
+    }
+  },
+  "note": {
+    "written": {
+      "definition": "A brief written message or record of something.",
+      "keywords": ["write", "message", "paper", "remind", "memo", "jot", "sticky", "notebook", "reminder"],
+      "example": "She left a note on the desk."
+    },
+    "music": {
+      "definition": "A single tone of a definite pitch made by a musical instrument or voice.",
+      "keywords": ["music", "sound", "pitch", "sing", "piano", "tone", "melody", "scale", "sharp", "flat"],
+      "example": "He played the wrong note on the piano."
+    }
+  },
+  "trunk": {
+    "tree": {
+      "definition": "The main woody stem of a tree.",
+      "keywords": ["tree", "wood", "bark", "thick", "branch", "oak", "tall", "base", "forest"],
+      "example": "The trunk of the tree was massive."
+    },
+    "car": {
+      "definition": "The enclosed space at the back of a car for carrying luggage.",
+      "keywords": ["car", "luggage", "bag", "suitcase", "storage", "back", "open", "load", "vehicle"],
+      "example": "Put the bags in the trunk."
+    },
+    "elephant": {
+      "definition": "The elongated nose of an elephant used for breathing, grasping, and feeding.",
+      "keywords": ["elephant", "nose", "animal", "long", "spray", "water", "zoo", "peanut", "africa"],
+      "example": "The elephant lifted food with its trunk."
+    }
+  },
+  "suit": {
+    "clothing": {
+      "definition": "A set of matching outer clothes consisting of a jacket and trousers or skirt.",
+      "keywords": ["wear", "jacket", "tie", "formal", "office", "business", "trousers", "dress", "interview"],
+      "example": "He wore a suit to the interview."
+    },
+    "legal": {
+      "definition": "A lawsuit; a legal action brought before a court.",
+      "keywords": ["court", "law", "legal", "case", "judge", "lawsuit", "file", "claim", "attorney", "damages"],
+      "example": "She filed a suit against the company."
+    }
+  },
+  "pitch": {
+    "throw": {
+      "definition": "To throw or toss something, especially a ball.",
+      "keywords": ["throw", "ball", "baseball", "toss", "fast", "game", "pitcher", "hurl", "strike"],
+      "example": "The pitcher threw a perfect pitch."
+    },
+    "sound_quality": {
+      "definition": "The quality of a sound governed by the rate of vibrations; highness or lowness.",
+      "keywords": ["sound", "high", "low", "voice", "tone", "frequency", "music", "sing", "note"],
+      "example": "Her voice had a very high pitch."
+    },
+    "sales": {
+      "definition": "A presentation or proposal designed to persuade someone to buy or invest.",
+      "keywords": ["sell", "presentation", "idea", "business", "investor", "proposal", "convince", "marketing"],
+      "example": "He gave a great sales pitch."
+    }
+  },
+  "plot": {
+    "story": {
+      "definition": "The main events of a novel, play, movie, or similar work.",
+      "keywords": ["story", "movie", "novel", "twist", "narrative", "character", "scene", "ending", "drama"],
+      "example": "The plot of the movie was thrilling."
+    },
+    "land": {
+      "definition": "A small piece of ground marked out for a specific purpose.",
+      "keywords": ["land", "ground", "garden", "build", "lot", "property", "acre", "farm", "house"],
+      "example": "They bought a plot of land to build a house."
+    },
+    "scheme": {
+      "definition": "A secret plan to do something harmful or illegal.",
+      "keywords": ["plan", "secret", "scheme", "conspiracy", "overthrow", "evil", "against", "devise"],
+      "example": "They plotted to overthrow the government."
+    }
+  },
+  "lead": {
+    "guide": {
+      "definition": "To show the way; to be in charge or command of.",
+      "keywords": ["guide", "front", "charge", "team", "manage", "direct", "follow", "ahead", "command", "boss"],
+      "example": "She will lead the team to victory."
+    },
+    "metal": {
+      "definition": "A heavy, soft, bluish-gray metallic element.",
+      "keywords": ["metal", "heavy", "pipe", "toxic", "paint", "element", "weight", "bullet", "dense", "poisoning"],
+      "example": "Old pipes were made of lead."
+    }
+  },
+  "organ": {
+    "body_part": {
+      "definition": "A part of the body that has a specific vital function.",
+      "keywords": ["body", "heart", "liver", "kidney", "transplant", "vital", "function", "donor", "lung", "health"],
+      "example": "The heart is a vital organ."
+    },
+    "instrument": {
+      "definition": "A large musical keyboard instrument with pipes supplied by bellows.",
+      "keywords": ["music", "instrument", "church", "play", "keyboard", "pipe", "keys", "sound", "hymn"],
+      "example": "She played the organ at church."
+    }
+  },
+  "band": {
+    "music_group": {
+      "definition": "A group of musicians who play music together.",
+      "keywords": ["music", "play", "concert", "guitar", "drum", "stage", "singer", "song", "perform", "tour"],
+      "example": "The band played at the concert."
+    },
+    "strip": {
+      "definition": "A thin flat strip or loop of material used for fastening or as decoration.",
+      "keywords": ["rubber", "elastic", "wrist", "hair", "strip", "wrap", "tie", "loop", "bracelet"],
+      "example": "She tied her hair with a band."
+    }
+  },
+  "pound": {
+    "weight": {
+      "definition": "A unit of weight equal to approximately 0.4536 kilograms.",
+      "keywords": ["weight", "heavy", "kilogram", "scale", "ounce", "measure", "mass", "kg", "weigh"],
+      "example": "The package weighs five pounds."
+    },
+    "currency": {
+      "definition": "The basic monetary unit of the United Kingdom.",
+      "keywords": ["money", "currency", "british", "sterling", "pay", "cost", "price", "dollar", "euro", "coins"],
+      "example": "It costs ten pounds."
+    },
+    "hit": {
+      "definition": "To strike heavily and repeatedly.",
+      "keywords": ["hit", "strike", "beat", "knock", "door", "fist", "hard", "bang", "hammer", "heavy"],
+      "example": "He pounded on the door."
+    }
+  }
+}
