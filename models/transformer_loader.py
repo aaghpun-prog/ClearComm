@@ -1,5 +1,5 @@
 import torch
-from transformers import pipeline
+from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
 from typing import List
 import spacy
 
@@ -15,9 +15,11 @@ class TransformerModelsLoader:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._summarizer = None
+            cls._instance._summarizer_model = None
+            cls._instance._summarizer_tokenizer = None
             cls._instance._zero_shot = None
             cls._instance._sbert = None
+            cls._instance._torch_device = None
             try:
                 cls._instance._nlp = spacy.load("en_core_web_sm")
             except Exception:
@@ -32,24 +34,37 @@ class TransformerModelsLoader:
     def device(self):
         if torch.backends.mps.is_available():
             print("Using Apple GPU (MPS)")
-            return "mps"
+            return torch.device("mps")
+        if torch.cuda.is_available():
+            print("Using CUDA GPU")
+            return torch.device("cuda")
         print("Using CPU")
-        return -1
+        return torch.device("cpu")
+
+    @property
+    def torch_device(self):
+        if self._torch_device is None:
+            self._torch_device = self.device
+        return self._torch_device
+
+    # Pipeline device helper: transformers pipeline expects int or str
+    @property
+    def pipeline_device(self):
+        d = self.torch_device
+        if d.type == "cpu":
+            return -1
+        return d.type
 
     # -----------------------------------------------------
-    # BART SUMMARIZER
+    # FLAN-T5 SEQ2SEQ MODEL (direct loading, no pipeline)
     # -----------------------------------------------------
-    @property
-    def summarizer(self):
-        if self._summarizer is None:
+    def _load_summarizer(self):
+        if self._summarizer_model is None:
             print("Loading Flan-T5 (Instruction-Tuned) for Rewriting...")
-            self._summarizer = pipeline(
-                "text2text-generation",
-                model="google/flan-t5-base",
-                device=self.device
-            )
+            self._summarizer_tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
+            self._summarizer_model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base")
+            self._summarizer_model.to(self.torch_device)
             print("Flan-T5 loaded.")
-        return self._summarizer
 
     # -----------------------------------------------------
     # ZERO-SHOT CLASSIFIER (INFO GAP)
@@ -61,7 +76,7 @@ class TransformerModelsLoader:
             self._zero_shot = pipeline(
                 "zero-shot-classification",
                 model="valhalla/distilbart-mnli-12-1",
-                device=self.device
+                device=self.pipeline_device
             )
             print("Zero-shot model loaded.")
         return self._zero_shot
@@ -101,33 +116,50 @@ class TransformerModelsLoader:
         Rewrite text using Flan-T5 while controlling length
         and preserving important keywords.
         """
+        if not text or not text.strip():
+            return text
+
         keywords = self.extract_keywords(text)
 
         # Flan-T5 token math: ~1.3 tokens per word.
         target_tokens = int(target_length * 1.3)
         
-        max_len = target_tokens + 20
+        max_len = max(10, target_tokens + 20)
         min_len = max(5, target_tokens - 10)
 
+        # Ensure min_len < max_len
+        if min_len >= max_len:
+            min_len = max(5, max_len - 5)
+
         # Instruction-tuned prompt
+        keyword_str = ', '.join(keywords) if keywords else 'key concepts'
         prompt = (
             f"Rewrite the following text to be exactly {target_length} words long. "
-            f"Preserve the following important keywords: {', '.join(keywords)}.\n\n"
+            f"Preserve the following important keywords: {keyword_str}.\n\n"
             f"Text: {text}"
         )
 
         try:
-            result = self.summarizer(
+            self._load_summarizer()
+            tokenizer = self._summarizer_tokenizer
+            model = self._summarizer_model
+
+            inputs = tokenizer(
                 prompt,
+                return_tensors="pt",
+                max_length=512,
+                truncation=True
+            ).to(self.torch_device)
+
+            outputs = model.generate(
+                **inputs,
                 max_length=max_len,
                 min_length=min_len,
-                do_sample=True,
-                temperature=0.7,
                 num_beams=4,
                 early_stopping=True
             )
 
-            output = result[0]["generated_text"]
+            output = tokenizer.decode(outputs[0], skip_special_tokens=True)
             return output
 
         except Exception as e:
