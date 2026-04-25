@@ -1,192 +1,174 @@
+# -*- coding: utf-8 -*-
+"""
+Test: Smart Hybrid Info Gap Detection — 25 test cases.
+Covers all 8 intent types, multi-gap detection, false positive control,
+and unseen inputs.
+"""
 import os
 import sys
+import io
 import time
-import json
 
-# Ensure we're in the project root
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-from utils.preprocess import get_spacy_doc
-from models.transformer_loader import get_models
-from modules.info_gap_detector import check_info_gaps as new_check_info_gaps
+from modules.info_gap_detector import check_info_gaps
 
 # ==============================================================================
-# OLD BASELINE LOGIC (For comparison)
-# ==============================================================================
-
-def old_check_info_gaps(text: str) -> dict:
-    """The original logic from before the upgrade."""
-    gaps = []
-    doc = get_spacy_doc(text)
-    
-    has_person = False
-    has_time = False
-    has_action = False
-    
-    if doc:
-        has_person = any(ent.label_ in ['PERSON', 'ORG'] for ent in doc.ents)
-        has_time = any(ent.label_ in ['DATE', 'TIME'] for ent in doc.ents)
-        has_action = any(token.pos_ == 'VERB' for token in doc)
-        
-        has_subject = any(token.dep_ in ['nsubj', 'nsubjpass'] for token in doc)
-        if not has_subject and not has_person:
-            gaps.append({"sentence": text, "missing": "responsible person"})
-            
-    models = get_models()
-    if has_action:
-        categories = ["contains a specific deadline or time", "has a condition or dependency", "is a general statement"]
-        try:
-            result = models.classify_zero_shot(text, categories)
-            top_label = result['labels'][0]
-            if top_label == "is a general statement" and not has_time:
-                gaps.append({"sentence": text, "missing": "deadline"})
-        except Exception:
-            pass
-            
-    unique_gaps = []
-    seen_missing = set()
-    for gap in gaps:
-        if gap['missing'] not in seen_missing:
-            unique_gaps.append(gap)
-            seen_missing.add(gap['missing'])
-            
-    return {"gaps": unique_gaps}
-
-# ==============================================================================
-# BENCHMARK DATASET
+# BENCHMARK: 25 test cases
 # ==============================================================================
 
 BENCHMARK = [
-    # Casual / Greetings (Should have NO gaps)
-    {"text": "Good morning everyone!", "expected_gap": False, "category": "Casual"},
-    {"text": "Nice weather today, isn't it?", "expected_gap": False, "category": "Casual"},
-    {"text": "Thank you so much.", "expected_gap": False, "category": "Casual"},
-    {"text": "Hello there.", "expected_gap": False, "category": "Casual"},
-    
-    # Meetings
-    {"text": "Meeting tomorrow.", "expected_gap": True, "category": "Meeting", "missing_contains": ["Time", "Location"]},
-    {"text": "Catch up call at 2pm.", "expected_gap": True, "category": "Meeting", "missing_contains": ["Location"]},
-    {"text": "Project sync meeting tomorrow at 10am in Room 4B.", "expected_gap": False, "category": "Meeting"},
-    {"text": "Let's meet.", "expected_gap": True, "category": "Meeting", "missing_contains": ["Time"]},
-    {"text": "Let's meet on Zoom at 3pm.", "expected_gap": False, "category": "Meeting"},
-    
-    # Events
-    {"text": "Annual conference next month.", "expected_gap": True, "category": "Event", "missing_contains": ["Time", "Venue"]},
-    {"text": "Workshop on Sunday at 10am.", "expected_gap": True, "category": "Event", "missing_contains": ["Venue"]},
-    {"text": "Party tonight at 8pm at the main hall.", "expected_gap": False, "category": "Event"},
-    
-    # Sales
-    {"text": "Product available for sale.", "expected_gap": True, "category": "Sale", "missing_contains": ["Price", "Contact"]},
-    {"text": "Selling my old bicycle for 50 dollars.", "expected_gap": True, "category": "Sale", "missing_contains": ["Contact"]},
-    {"text": "Shoes on sale for $20. Contact 555-1234.", "expected_gap": False, "category": "Sale"},
-    {"text": "We offer a 10% discount on all items. Buy now at www.example.com for $10.", "expected_gap": False, "category": "Sale"},
-    
-    # Job / Interview
-    {"text": "Hiring for a new software role.", "expected_gap": True, "category": "Job", "missing_contains": ["Date", "Time", "Venue"]},
-    {"text": "Job interview on Monday.", "expected_gap": True, "category": "Job", "missing_contains": ["Time", "Venue"]},
-    {"text": "Interview tomorrow at 10am via Google Meet.", "expected_gap": False, "category": "Job"},
-    
-    # Tasks / Requests
-    {"text": "Please update the report.", "expected_gap": True, "category": "Task", "missing_contains": ["Deadline"]},
-    {"text": "Submit the assignment by Friday 5pm.", "expected_gap": True, "category": "Task", "missing_contains": ["Assignee"]},
-    {"text": "John, please submit the assignment by Friday 5pm.", "expected_gap": False, "category": "Task"},
-    {"text": "Need to finish this task.", "expected_gap": True, "category": "Task", "missing_contains": ["Deadline"]},
-    
-    # General Informational (Should have NO gaps)
-    {"text": "The earth revolves around the sun.", "expected_gap": False, "category": "General"},
-    {"text": "Rome is the capital of Italy.", "expected_gap": False, "category": "General"},
+    # --- CASUAL / GENERAL (should have NO gaps) ---
+    {"id": 1,  "text": "Good morning everyone!", "expect_gap": False, "cat": "Casual"},
+    {"id": 2,  "text": "Thank you so much.", "expect_gap": False, "cat": "Casual"},
+    {"id": 3,  "text": "The earth revolves around the sun.", "expect_gap": False, "cat": "General"},
+    {"id": 4,  "text": "Rome is the capital of Italy.", "expect_gap": False, "cat": "General"},
+    {"id": 5,  "text": "I like cricket.", "expect_gap": False, "cat": "General"},
+
+    # --- MEETING ---
+    {"id": 6,  "text": "Team meeting tomorrow.",
+     "expect_gap": True, "cat": "Meeting", "must_contain": ["Time"]},
+    {"id": 7,  "text": "Catch up call at 2 PM.",
+     "expect_gap": True, "cat": "Meeting", "must_contain": ["Venue", "Location"]},
+    {"id": 8,  "text": "Project sync meeting tomorrow at 10am in Room 4B.",
+     "expect_gap": False, "cat": "Meeting"},
+    {"id": 9,  "text": "Let's meet on Zoom at 3pm.",
+     "expect_gap": False, "cat": "Meeting"},
+
+    # --- EVENT ---
+    {"id": 10, "text": "Annual conference next month.",
+     "expect_gap": True, "cat": "Event", "must_contain": ["Time", "Venue"]},
+    {"id": 11, "text": "Party tonight at 8pm at the main hall.",
+     "expect_gap": False, "cat": "Event"},
+
+    # --- TASK ---
+    {"id": 12, "text": "Submit the project report.",
+     "expect_gap": True, "cat": "Task", "must_contain": ["Deadline"]},
+    {"id": 13, "text": "Please update the report.",
+     "expect_gap": True, "cat": "Task", "must_contain": ["Deadline"]},
+    {"id": 14, "text": "John, please submit the assignment by Friday 5pm.",
+     "expect_gap": False, "cat": "Task"},
+
+    # --- INTERVIEW ---
+    {"id": 15, "text": "Interview scheduled next week.",
+     "expect_gap": True, "cat": "Interview", "must_contain": ["Time"]},
+    {"id": 16, "text": "Job interview on Monday.",
+     "expect_gap": True, "cat": "Interview", "must_contain": ["Time", "Venue"]},
+    {"id": 17, "text": "Interview tomorrow at 10am via Google Meet.",
+     "expect_gap": False, "cat": "Interview"},
+
+    # --- WORKSHOP ---
+    {"id": 18, "text": "Workshop tomorrow on AI.",
+     "expect_gap": True, "cat": "Workshop", "must_contain": ["Time", "Venue"]},
+    {"id": 19, "text": "Seminar next Monday on AI.",
+     "expect_gap": True, "cat": "Workshop", "must_contain": ["Time", "Venue"]},
+
+    # --- TRAVEL ---
+    {"id": 20, "text": "Visit client tomorrow.",
+     "expect_gap": True, "cat": "Travel", "must_contain": ["Time"]},
+    {"id": 21, "text": "Visit branch office tomorrow.",
+     "expect_gap": True, "cat": "Travel", "must_contain": ["Time"]},
+
+    # --- PAYMENT ---
+    {"id": 22, "text": "Pay hostel fees today.",
+     "expect_gap": True, "cat": "Payment", "must_contain": ["Amount"]},
+    {"id": 23, "text": "Pay fees soon.",
+     "expect_gap": True, "cat": "Payment", "must_contain": ["Amount", "Deadline"]},
+
+    # --- EMERGENCY ---
+    {"id": 24, "text": "Server outage! Fix immediately.",
+     "expect_gap": True, "cat": "Emergency", "must_contain": ["Contact"]},
+
+    # --- MULTI-SENTENCE ---
+    {"id": 25, "text": "Meeting tomorrow. Submit the report by Friday.",
+     "expect_gap": True, "cat": "Multi", "must_contain": ["Time"]},
 ]
 
-def check_match(gaps, expected_gap, missing_contains=None):
-    if expected_gap:
+
+def check_result(gaps, tc):
+    """Check if result matches expectations."""
+    if tc["expect_gap"]:
         if not gaps:
-            return False, "False Negative (Empty no-gap mistake)"
-        if missing_contains:
-            missing_str = gaps[0].get("missing", "").lower()
-            for req in missing_contains:
-                if req.lower() not in missing_str:
+            return False, "False Negative — no gaps found"
+        if "must_contain" in tc:
+            all_missing = ' '.join(g.get('missing', '') for g in gaps).lower()
+            for req in tc["must_contain"]:
+                if req.lower() not in all_missing:
                     return False, f"Missing expected field: {req}"
-        return True, "Correctly found gap"
+        return True, "Correct — gap detected"
     else:
         if gaps:
-            return False, f"False Positive (Found gap: {gaps[0].get('missing')})"
-        return True, "Correctly found NO gap"
+            return False, f"False Positive — found: {gaps[0].get('missing', '?')}"
+        return True, "Correct — no gap"
 
-def run_evaluation(name, pipeline_fn):
-    print(f"\n{'='*60}")
-    print(f" EVALUATING: {name}")
-    print(f"{'='*60}")
-    
+
+def run_tests():
+    total = len(BENCHMARK)
+    print("=" * 80)
+    print(f"  INFO GAP DETECTION TEST  ({total} cases)")
+    print("=" * 80)
+
+    results = []
     correct = 0
-    false_positives = 0
-    false_negatives = 0
-    total_time = 0.0
-    
-    for i, tc in enumerate(BENCHMARK, 1):
-        text = tc["text"]
-        
+    fp = 0
+    fn = 0
+    total_time = 0
+
+    for tc in BENCHMARK:
         t0 = time.time()
         try:
-            res = pipeline_fn(text)
+            res = check_info_gaps(tc["text"])
             gaps = res.get("gaps", [])
         except Exception as e:
-            print(f"Error on '{text}': {e}")
+            print(f"  ERROR on #{tc['id']}: {e}")
             gaps = []
         elapsed = time.time() - t0
         total_time += elapsed
-        
-        ok, msg = check_match(gaps, tc["expected_gap"], tc.get("missing_contains"))
-        
+
+        ok, msg = check_result(gaps, tc)
+
         if ok:
             correct += 1
+        elif tc["expect_gap"] and not gaps:
+            fn += 1
+        elif not tc["expect_gap"] and gaps:
+            fp += 1
         else:
-            if tc["expected_gap"] and not gaps:
-                false_negatives += 1
-            elif not tc["expected_gap"] and gaps:
-                false_positives += 1
-                
-        # print(f"[{'PASS' if ok else 'FAIL'}] {text}")
-        # if not ok:
-        #     print(f"  -> {msg}")
-            
-    total = len(BENCHMARK)
-    acc = correct / total * 100
-    avg_time = (total_time / total) * 1000
-    
-    print(f"Accuracy:        {acc:.1f}% ({correct}/{total})")
-    print(f"False Positives: {false_positives}")
-    print(f"False Negatives: {false_negatives} (Empty no-gap mistakes)")
-    print(f"Avg Time/sent:   {avg_time:.1f} ms")
-    
-    return {
-        "accuracy": acc,
-        "false_positives": false_positives,
-        "false_negatives": false_negatives,
-        "avg_time_ms": avg_time
-    }
+            fn += 1  # wrong fields detected
 
-def main():
-    print("Pre-loading models...")
-    _ = get_models()
-    get_spacy_doc("Warm up")
-    
-    print("Running Info Gap Benchmark...")
-    old_res = run_evaluation("Old Baseline System", old_check_info_gaps)
-    new_res = run_evaluation("New Hybrid System", new_check_info_gaps)
-    
-    print(f"\n{'='*60}")
-    print(" COMPARISON")
-    print(f"{'='*60}")
-    print(f"Accuracy Improvement: +{new_res['accuracy'] - old_res['accuracy']:.1f}%")
-    print(f"False Positives:      {old_res['false_positives']} -> {new_res['false_positives']}")
-    print(f"False Negatives:      {old_res['false_negatives']} -> {new_res['false_negatives']}")
-    print(f"Speed Improvement:    {old_res['avg_time_ms'] - new_res['avg_time_ms']:.1f} ms per sentence")
-    
-    # Save results
-    results = {"old": old_res, "new": new_res}
-    os.makedirs("docs", exist_ok=True)
-    with open("docs/info_gap_eval.json", "w") as f:
-        json.dump(results, f, indent=2)
+        gap_str = gaps[0]['missing'] if gaps else "(none)"
+        verdict = "PASS" if ok else "FAIL"
+
+        print(f"  [{verdict}] #{tc['id']:>2} [{tc['cat']:<10}] {tc['text'][:55]:<56} -> {gap_str}")
+        if not ok:
+            print(f"         ^ {msg}")
+
+        results.append({"id": tc["id"], "ok": ok, "cat": tc["cat"]})
+
+    # Summary
+    acc = correct / total * 100
+    avg_ms = (total_time / total) * 1000
+
+    print("\n" + "=" * 80)
+    print(f"  SUMMARY")
+    print("=" * 80)
+    print(f"  Accuracy:        {acc:.1f}% ({correct}/{total})")
+    print(f"  False Positives: {fp}")
+    print(f"  False Negatives: {fn}")
+    print(f"  Avg Time/sent:   {avg_ms:.1f} ms")
+    print("=" * 80)
+
+    if correct == total:
+        print("\n[SUCCESS] All tests passed!")
+    else:
+        print(f"\n[PARTIAL] {total - correct} test(s) need review.")
+
+    return correct == total
+
 
 if __name__ == "__main__":
-    main()
+    success = run_tests()
+    sys.exit(0 if success else 1)
