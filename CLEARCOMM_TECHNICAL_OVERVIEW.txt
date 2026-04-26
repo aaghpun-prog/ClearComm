@@ -1,0 +1,584 @@
+================================================================================
+              CLEARCOMM — FULL TECHNICAL ARCHITECTURE OVERVIEW
+================================================================================
+
+================================================================================
+1. PROJECT STACK
+================================================================================
+
+Language:          Python 3.11
+Backend:           Flask 3.0.2 (lightweight WSGI micro-framework)
+Frontend:          Single-page HTML + vanilla CSS + vanilla JavaScript
+                   (no React/Vue/Angular — all in templates/index.html)
+Font:              Google Fonts — Inter (400/500/600/700)
+Design:            Dark-mode UI with CSS custom properties, glassmorphism cards,
+                   micro-animations, SVG icons, tab-based navigation
+
+AI/NLP Libraries:
+  - google-genai          — Gemini API client (length control primary engine)
+  - sentence-transformers — SBERT (all-MiniLM-L6-v2) for homonym cosine similarity
+  - transformers          — Flan-T5-base (legacy rewriter), DistilBERT WiC model,
+                            DistilBART zero-shot classifier
+  - spaCy 3.7.4           — en_core_web_sm for POS tagging, NER, dependency parsing
+  - NLTK 3.8.1            — sentence/word tokenization, WordNet synsets
+  - torch 2.2.1           — PyTorch backend for all transformer inference
+  - scikit-learn           — evaluation metrics for benchmarking
+  - python-dotenv          — secure .env loading for API keys
+
+APIs:
+  - Google Gemini API (gemini-2.5-flash) — AI text rewriting for length control
+
+Folder Structure:
+  ClearComm/
+  ├── app.py                        Flask application entry point
+  ├── requirements.txt              Python dependencies
+  ├── .env                          API keys (GEMINI_API_KEY)
+  ├── .gitignore                    Git exclusions (includes .env)
+  ├── templates/
+  │   └── index.html                Single-page frontend (HTML+CSS+JS)
+  ├── modules/
+  │   ├── length_control.py         Gemini-powered length control engine
+  │   ├── homonym_detector.py       3-layer homonym detection pipeline
+  │   ├── info_gap_detector.py      5-layer info gap detection system
+  │   ├── model_utils.py            WiC model loader (DistilBERT singleton)
+  │   ├── report_generator.py       Combined clarity scoring (legacy)
+  │   └── wic_loader.py             WiC dataset parser for model training
+  ├── models/
+  │   └── transformer_loader.py     Singleton loader for SBERT, Flan-T5, zero-shot
+  ├── data/
+  │   └── homonyms.json             Curated homonym knowledge base (40+ words)
+  ├── utils/
+  │   ├── preprocess.py             spaCy/NLTK tokenization wrappers
+  │   └── helpers.py                Text cleaning and report formatting
+  ├── WiC_dataset/                  Word-in-Context training data (train/dev/test)
+  ├── nltk_data/                    Local NLTK corpora (wordnet, punkt, etc.)
+  ├── test_length_control.py        12-case length control test suite
+  ├── test_length_control_gemini.py 6-case Gemini-specific test suite
+  ├── test_info_gap.py              Info gap detector test suite
+  ├── test_hybrid_homonym.py        Homonym detector test suite
+  └── eval_homonym_accuracy.py      Homonym accuracy benchmarking script
+
+
+================================================================================
+2. SYSTEM ARCHITECTURE
+================================================================================
+
+The system follows a classic 3-tier architecture:
+
+  BROWSER (Frontend)  <-->  FLASK (Backend)  <-->  AI/NLP ENGINES (Modules)
+
+Frontend Layer:
+  - Single index.html served by Flask's Jinja2 template engine
+  - Three tabs: Length Control | Homonym Detector | Info Gap Detector
+  - JavaScript async fetch() calls to Flask API endpoints
+  - Loader spinners during processing, result cards rendered from JSON
+  - No external JS frameworks — pure vanilla JavaScript
+
+Backend Layer (app.py):
+  - Flask app with 4 routes: / (UI), /length_control, /homonym_detector, /info_gap
+  - TEMPLATES_AUTO_RELOAD enabled for development
+  - Cache-Control: no-store headers via @app.after_request
+  - JSON request/response protocol for all API endpoints
+  - Global error handling with traceback printing
+
+Module Layer:
+  - Each module is self-contained with its own imports and logic
+  - Modules import from utils/preprocess.py for tokenization
+  - Models are loaded via singleton pattern (loaded once, reused)
+  - Each module returns a dict that Flask serializes to JSON
+
+Data Flow:
+  Browser → POST JSON → Flask route → Module function → AI/NLP processing
+  → Dict result → jsonify() → JSON response → JS renders HTML cards
+
+
+================================================================================
+3. REQUEST FLOW
+================================================================================
+
+A) LENGTH CONTROL FLOW
+──────────────────────
+
+  User enters text + target word count → clicks "Rewrite"
+  │
+  ├─ JS: POST /length_control {text, target}
+  │
+  ├─ Flask: app.py calls analyze_length_and_rewrite(text, target)
+  │
+  ├─ Step 1: _analyze_input() — count words, determine mode:
+  │   • compress (target < original)
+  │   • expand   (target > original)
+  │   • refine   (target ≈ original, within ±2)
+  │
+  ├─ Step 2: PRIMARY — _gemini_rewrite()
+  │   • Lazy-loads Gemini client (singleton, API key from .env)
+  │   • Builds mode-specific prompt (compress/expand/refine instructions)
+  │   • Calls gemini-2.5-flash via google-genai SDK
+  │   • Validates output: rejects empty, identical, repetitive results
+  │   • If word count deviation > 2: auto-retries with corrective prompt
+  │   • Max 3 attempts, keeps best valid result
+  │
+  ├─ Step 3: FALLBACK (if Gemini fails/unavailable)
+  │   • Compression: phrase shortening → filler removal → sentence scoring
+  │     → single-sentence POS-based word removal → smart trim
+  │   • Expansion: abbreviation expansion → fragment structurization
+  │     → modifier injection (adjectives before nouns, adverbs after verbs)
+  │   • Refinement: phrase shortening + filler removal only
+  │
+  ├─ Step 4: _postprocess()
+  │   • Normalize whitespace, remove duplicate consecutive words
+  │   • Remove comma spam, clean dangling trailing words
+  │   • Ensure final punctuation, capitalize first letter, normalize quotes
+  │
+  ├─ Step 5: _enforce_target() — ensure ±2 word tolerance
+  │   • Over target: _smart_trim() prefers sentence boundaries
+  │   • Under target: borrows unused words from original text
+  │
+  └─ Return JSON: {original_word_count, target_word_count, rewritten_text,
+                    final_word_count, deviation, status, message}
+
+
+B) HOMONYM DETECTOR FLOW
+─────────────────────────
+
+  User enters text → clicks "Analyze Context"
+  │
+  ├─ JS: POST /homonym_detector {text}
+  │
+  ├─ Flask: calls analyze_homonyms_sbert_pipeline(text)
+  │
+  ├─ Step 1: POS Filtering
+  │   • spaCy parses text → extract tokens with POS tags
+  │   • Keep only NOUN, PROPN, ADJ, VERB (curated words bypass filter)
+  │   • Skip verb blacklist (go, do, make, get, etc.) and words < 3 chars
+  │
+  ├─ Step 2: Ambiguity Check
+  │   • WordNet synsets lookup — skip words with only 1 meaning
+  │   • Curated words always proceed regardless of synset count
+  │
+  ├─ LAYER 1: Curated Keyword-Scoring (_try_curated_match)
+  │   • Load homonyms.json (40+ words, cached after first load)
+  │   • Merge with inline HOMONYM_DICT (JSON dataset takes priority)
+  │   • Tokenize sentence → count keyword hits for each meaning
+  │   • If best meaning has ≥1 hit, ≥10% ratio, ≥1 gap over second-best:
+  │     return confident result immediately (skip Layer 2)
+  │   • Confidence: high (≥20% ratio + gap≥2), medium, or low
+  │
+  ├─ LAYER 2: SBERT + WordNet AI Fallback
+  │   • Get candidate meanings from curated data or WordNet synsets
+  │   • Encode sentence with SBERT (all-MiniLM-L6-v2)
+  │   • Encode each meaning as enriched natural sentence
+  │   • Compute cosine similarity between sentence and each meaning
+  │   • Select highest-scoring meaning
+  │   • Apply dual-threshold strategy:
+  │     - Curated words: score≥0.15, gap≥0.01 (lenient for demo)
+  │     - General words: score≥0.40, gap≥0.04 (strict for precision)
+  │   • Assign confidence label: high/medium/low based on score+gap
+  │
+  ├─ LAYER 3: Silent Skip
+  │   • Words failing both layers are silently omitted
+  │   • No false positive is better than a wrong answer
+  │
+  └─ Return JSON: {homonyms: [{word, meaning, confidence, score, score_gap}]}
+
+
+C) INFO GAP DETECTOR FLOW
+──────────────────────────
+
+  User enters text → clicks "Scan for Gaps"
+  │
+  ├─ JS: POST /info_gap {text}
+  │
+  ├─ Flask: calls check_info_gaps(text)
+  │
+  ├─ Step 1: Sentence Splitting
+  │   • NLTK sent_tokenize splits multi-sentence input
+  │   • Each sentence analyzed independently
+  │
+  ├─ Step 2: Filtering
+  │   • Skip casual messages (hello, thanks, bye, etc.)
+  │   • Skip general factual statements (copula-only sentences)
+  │
+  ├─ Step 3: Entity Extraction (_extract_entities)
+  │   • Regex patterns: time, date, email, phone, URL, money
+  │   • spaCy NER: TIME, DATE, GPE, LOC, FAC, MONEY, PERSON, ORG
+  │   • Keyword fallback: location words (room, office, hall, etc.)
+  │   • Online mode keywords: zoom, teams, google meet, etc.
+  │
+  ├─ Step 4: Intent Classification (_classify_intent)
+  │   • 8 intents: Meeting, Event, Task, Interview, Workshop,
+  │     Travel, Payment, Emergency
+  │   • Keyword matching with weighted scoring
+  │   • Tie-breaking: Meeting wins over Task when time/date present
+  │   • Fallback: spaCy dependency parsing detects imperative sentences
+  │
+  ├─ Step 5: Gap Detection
+  │   • Each intent has required fields (e.g., Meeting needs time+location)
+  │   • Check extracted entities against required fields
+  │   • Missing fields become "gaps" with human-readable labels
+  │   • Deduplication by (sentence, missing) pairs
+  │
+  └─ Return JSON: {gaps: [{sentence, missing, confidence, intent, suggestion}]}
+
+
+================================================================================
+4. FILE PURPOSES
+================================================================================
+
+app.py
+  Flask application entry point. Defines 4 routes (/, /length_control,
+  /homonym_detector, /info_gap). Configures template auto-reload and
+  cache-busting headers. Runs on port 5001 with debug=True.
+
+templates/index.html
+  Complete single-page frontend (865 lines). Contains all CSS (design tokens,
+  dark theme, animations, responsive layout) and JavaScript (tab switching,
+  async API calls, JSON-to-HTML rendering for each module's output).
+
+modules/length_control.py
+  AI-powered text rewriting engine. Primary: Gemini API with mode-specific
+  prompts, 3-attempt retry loop, output validation. Fallback: deterministic
+  rule-based compression (POS scoring, sentence selection), expansion
+  (abbreviation expansion, fragment structurization, modifier injection),
+  and refinement. Post-processing pipeline and ±2 word enforcement.
+
+modules/homonym_detector.py
+  3-layer contextual homonym detection. Layer 1: curated JSON keyword scoring
+  (fast, no ML). Layer 2: SBERT cosine similarity with enriched meaning
+  encodings + WordNet definitions. Layer 3: silent low-confidence filtering.
+  Dual-threshold strategy (lenient for curated, strict for general words).
+
+modules/info_gap_detector.py
+  5-layer information gap detection. Layer 1: intent classification via
+  keyword scoring (8 intents). Layer 2: multi-entity extraction (spaCy NER +
+  regex + keyword fallback). Layer 3: per-intent required field rules.
+  Layer 4: multi-sentence independent analysis. Layer 5: casual/general
+  statement filtering.
+
+modules/model_utils.py
+  Singleton loader for the fine-tuned DistilBERT WiC (Word-in-Context) model.
+  Loads from saved_models/wic_model if available, falls back to base
+  distilbert-base-uncased. Predicts best meaning by computing softmax
+  probabilities across sentence pairs.
+
+modules/report_generator.py
+  Legacy combined clarity scoring module. Orchestrates all three analyses
+  (length, homonym, info gap) and computes a 0-100 clarity score with
+  5-point penalties per issue found.
+
+modules/wic_loader.py
+  Parser for the Word-in-Context (WiC) dataset. Reads .data.txt and
+  .gold.txt partition files and converts them to HuggingFace Dataset
+  objects for model training.
+
+models/transformer_loader.py
+  Singleton factory for all transformer models. Lazy-loads:
+  - Flan-T5-base (seq2seq rewriting — legacy, still available)
+  - SBERT all-MiniLM-L6-v2 (homonym embedding similarity)
+  - DistilBART zero-shot classifier (legacy intent classification)
+  Handles device selection (CUDA, Apple MPS, CPU).
+
+data/homonyms.json
+  Curated homonym knowledge base. 40+ English words, each with 2-3 meanings.
+  Each meaning has: definition, 8-10 context keywords, example sentence.
+  Used by Layer 1 of homonym detector for fast keyword matching.
+
+utils/preprocess.py
+  Shared NLP preprocessing. Wraps NLTK sent_tokenize and word_tokenize.
+  Loads spaCy en_core_web_sm model and provides get_spacy_doc() for POS
+  tagging, NER, and dependency parsing across all modules.
+
+utils/helpers.py
+  Text cleaning utility (whitespace normalization) and standardized
+  report issue formatting function.
+
+requirements.txt
+  All Python dependencies with pinned versions. Includes Flask, PyTorch,
+  transformers, spaCy, NLTK, sentence-transformers, google-genai,
+  python-dotenv, scikit-learn, datasets, evaluate.
+
+
+================================================================================
+5. AI / NLP TECHNOLOGIES USED
+================================================================================
+
+Gemini API (google-genai SDK)
+  Used in length_control.py as the primary rewriting engine. The module
+  lazy-loads a genai.Client with the API key from .env. Sends structured
+  prompts specifying mode (compress/expand/refine), target word count,
+  and strict output rules. Retries up to 3 times with corrective prompts
+  if word count deviates.
+
+SBERT Embeddings (all-MiniLM-L6-v2)
+  Used in homonym_detector.py Layer 2. Encodes the input sentence and each
+  candidate meaning into dense 384-dimensional vectors using the
+  SentenceTransformer model. Meanings are enriched as natural sentences
+  (e.g., "bank (financial): A financial institution...") for better
+  semantic matching.
+
+Cosine Similarity
+  Computed between SBERT sentence embedding and each meaning embedding
+  using sentence_transformers.util.cos_sim(). The highest-scoring meaning
+  is selected. Score gap (difference between top-2 scores) determines
+  confidence level.
+
+WordNet (NLTK)
+  Used as the meaning source for non-curated words. wn.synsets(word)
+  retrieves all known definitions and example sentences. Provides the
+  candidate pool for SBERT similarity comparison.
+
+spaCy NER / POS Tagging (en_core_web_sm)
+  - POS tagging: Filters homonym candidates (NOUN/VERB/ADJ only),
+    scores sentence importance for compression, detects fragments
+  - NER: Extracts TIME, DATE, GPE, LOC, PERSON, ORG, MONEY entities
+    for info gap detection
+  - Dependency parsing: Detects imperative sentences (ROOT verb at
+    position 0), identifies copula-only general statements
+
+Regex Extraction
+  Info gap detector uses compiled regex patterns for: time (12:00pm,
+  noon, morning), date (tomorrow, next Monday, January 5th), email,
+  phone numbers, URLs, and money amounts ($100, Rs.500, 50 dollars).
+
+DistilBERT WiC Model
+  Fine-tuned on the Word-in-Context dataset for same/different meaning
+  classification. Takes (sentence1, sentence2) pairs, outputs softmax
+  probability of "same meaning." Used as optional Layer 2 enhancement
+  when saved_models/wic_model exists.
+
+Flan-T5-base (Legacy)
+  Instruction-tuned seq2seq model previously used for length-controlled
+  rewriting. Still available in transformer_loader.py but superseded
+  by Gemini API as the primary engine.
+
+Fallback Systems:
+  Every module has fallback paths:
+  - Length control: Gemini → deterministic rule engine
+  - Homonym: curated keywords → SBERT+WordNet → silent skip
+  - Info gap: keyword intent → spaCy dependency fallback
+  - spaCy unavailable: NLTK POS tagging as fallback
+  The system never crashes — all AI calls are wrapped in try/except.
+
+
+================================================================================
+6. ENGINEERING DECISIONS
+================================================================================
+
+Why Hybrid AI + Rule-Based?
+  Pure AI models (LLMs, transformers) are powerful but unpredictable.
+  They can hallucinate, return wrong word counts, or give low-confidence
+  answers. Pure rule-based systems are predictable but lack intelligence.
+  The hybrid approach gives the best of both: AI handles the hard cases
+  (semantic understanding, natural rewriting) while rules provide
+  guaranteed fallback behavior and fast-path shortcuts.
+
+Why Flask?
+  Flask is lightweight, minimal-config, and ideal for a demo project.
+  It requires no boilerplate (unlike Django), starts instantly, and
+  integrates trivially with Python ML libraries. A single app.py file
+  handles all routing. For a college demo that runs locally, Flask's
+  simplicity is a strength.
+
+Why Fallback Systems?
+  AI APIs can fail (network errors, quota limits, timeouts). ML models
+  can produce garbage output. A production-quality system must degrade
+  gracefully. ClearComm's fallback chain ensures:
+  - No API key? → deterministic engine works offline
+  - Gemini timeout? → rule-based compression/expansion kicks in
+  - spaCy missing? → NLTK POS tagging substitutes
+  - WiC model not trained? → SBERT handles homonyms
+  The user always gets a result.
+
+Why Confidence Scoring?
+  Not all AI outputs are equally reliable. Confidence scoring (high/
+  medium/low) lets the frontend communicate certainty to the user.
+  It also prevents false positives: the homonym detector silently
+  skips words where confidence is too low, rather than showing a
+  wrong answer. The dual-threshold strategy (lenient for curated
+  words, strict for general) balances demo reliability with precision.
+
+Why Singleton Model Loading?
+  Transformer models are large (100MB+ each). Loading them on every
+  request would be extremely slow. The singleton pattern (used in
+  TransformerModelsLoader and WiCModelLoader) ensures each model is
+  loaded exactly once into memory and reused for all subsequent
+  requests. This makes response times fast after initial startup.
+
+Why Curated JSON Dataset?
+  The homonyms.json knowledge base provides instant, high-confidence
+  matches without any ML inference. For the 40+ most common English
+  homonyms, keyword matching runs in microseconds vs milliseconds
+  for SBERT. This makes Layer 1 effectively "free" and only falls
+  through to expensive Layer 2 when the curated data isn't confident.
+
+
+================================================================================
+7. PROJECT STRENGTHS
+================================================================================
+
+1. Professional Architecture
+   Three independent NLP modules with clean separation of concerns.
+   Each module has its own pipeline, fallback chain, and JSON API.
+
+2. Multi-Layer Intelligence
+   Not a simple API wrapper. Each feature has 2-5 processing layers
+   combining ML models, knowledge bases, regex, and rule engines.
+
+3. Graceful Degradation
+   Every AI component has a fallback. System works fully offline
+   (without Gemini) and without optional models (WiC, spaCy).
+
+4. Real AI Integration
+   Uses production APIs (Gemini) and research models (SBERT,
+   DistilBERT, Flan-T5) — not toy implementations.
+
+5. Polished Frontend
+   Dark-mode design with CSS custom properties, smooth animations,
+   loading states, and responsive layout. Looks professional.
+
+6. Confidence Transparency
+   Shows users HOW confident the system is, not just what it found.
+   Dual-threshold scoring prevents misleading results.
+
+7. Comprehensive Testing
+   Multiple test suites with diverse inputs, tolerance checks,
+   quality validation (punctuation, capitalization, no duplicates).
+
+8. Secure Practices
+   API keys in .env (gitignored), loaded via os.getenv().
+   No hardcoded secrets anywhere in the codebase.
+
+
+================================================================================
+8. FUTURE IMPROVEMENTS
+================================================================================
+
+1. Database Integration
+   Add PostgreSQL/MongoDB to store analysis history, user sessions,
+   and cached results for repeated inputs.
+
+2. User Authentication
+   Add login/signup with JWT tokens for multi-user support.
+
+3. Batch Processing API
+   Accept multiple texts in a single request for bulk analysis.
+
+4. WebSocket Real-Time
+   Stream Gemini responses token-by-token for better UX on long texts.
+
+5. Custom Homonym Training
+   Let users add domain-specific homonyms via admin interface.
+
+6. Multi-Language Support
+   Extend beyond English using multilingual SBERT and spaCy models.
+
+7. Containerization
+   Dockerize the application for consistent deployment across
+   environments. Add docker-compose for multi-service setup.
+
+8. Cloud Deployment
+   Deploy on GCP Cloud Run or AWS Lambda with auto-scaling.
+   Use Redis for model caching across instances.
+
+9. CI/CD Pipeline
+   GitHub Actions for automated testing, linting, and deployment.
+
+10. Rate Limiting
+    Add Flask-Limiter to prevent API abuse in production.
+
+
+================================================================================
+9. VIVA QUESTIONS AND ANSWERS
+================================================================================
+
+Q1: What is ClearComm?
+A: ClearComm is an AI-powered text clarity analysis tool with three modules:
+   length-controlled rewriting, contextual homonym detection, and information
+   gap detection. It uses a hybrid architecture combining AI APIs, transformer
+   models, and rule-based systems.
+
+Q2: Why did you use Flask instead of Django?
+A: Flask is lightweight and requires minimal boilerplate, making it ideal for
+   a focused demo project. Django's ORM, admin panel, and middleware would be
+   unnecessary overhead since ClearComm doesn't use a database.
+
+Q3: How does the length control module work?
+A: It sends the input text and target word count to the Gemini API with a
+   mode-specific prompt (compress/expand/refine). The output is validated
+   for word count (±2 tolerance), and retried up to 3 times if needed.
+   If Gemini fails, a deterministic fallback engine uses POS-based word
+   scoring, phrase shortening, and smart trimming.
+
+Q4: What is SBERT and how is it used?
+A: SBERT (Sentence-BERT) is a transformer model that converts sentences into
+   dense vector embeddings. We use the all-MiniLM-L6-v2 model to encode both
+   the input sentence and candidate word meanings, then compute cosine
+   similarity to find the best matching meaning for ambiguous words.
+
+Q5: What is cosine similarity?
+A: Cosine similarity measures the angle between two vectors in high-dimensional
+   space. A value of 1.0 means identical direction (same meaning), 0.0 means
+   orthogonal (unrelated). We use it to compare SBERT embeddings of sentences
+   and word definitions.
+
+Q6: How does the homonym detector achieve high precision?
+A: Through a 3-layer architecture: Layer 1 uses a curated JSON knowledge base
+   with keyword matching for instant high-confidence results. Layer 2 uses
+   SBERT cosine similarity for AI-based matching. A dual-threshold strategy
+   applies lenient thresholds for curated words and strict thresholds for
+   general words. Low-confidence results are silently skipped.
+
+Q7: What is the Word-in-Context (WiC) dataset?
+A: WiC is a benchmark dataset where each example has two sentences containing
+   the same word, labeled True (same meaning) or False (different meaning).
+   We use it to fine-tune a DistilBERT classifier for word sense disambiguation.
+
+Q8: How does info gap detection classify intent?
+A: It uses weighted keyword matching across 8 intent categories (Meeting, Event,
+   Task, Interview, Workshop, Travel, Payment, Emergency). A tie-breaking rule
+   boosts Meeting over Task when time/date indicators are present. Fallback
+   uses spaCy dependency parsing to detect imperative sentences.
+
+Q9: What happens if the Gemini API is unavailable?
+A: The system falls back to a deterministic rule-based engine. For compression,
+   it removes filler words, shortens verbose phrases, and uses POS-based word
+   importance scoring. For expansion, it expands abbreviations, structurizes
+   fragments into complete sentences, and adds contextual modifiers.
+
+Q10: What is the singleton pattern and why is it used here?
+A: The singleton pattern ensures a class has only one instance. We use it for
+    model loaders (TransformerModelsLoader, WiCModelLoader) so that large
+    transformer models are loaded into memory only once and reused across
+    all requests, avoiding repeated 5-10 second load times.
+
+Q11: How do you handle security for API keys?
+A: API keys are stored in a .env file which is listed in .gitignore so it is
+    never committed to version control. The code loads it using python-dotenv
+    and os.getenv("GEMINI_API_KEY"). No keys are hardcoded anywhere.
+
+Q12: What NLP preprocessing does the project use?
+A: NLTK for sentence tokenization (sent_tokenize) and word tokenization
+    (word_tokenize). spaCy en_core_web_sm for POS tagging, Named Entity
+    Recognition, and dependency parsing. All accessed through utils/preprocess.py.
+
+Q13: How does the frontend communicate with the backend?
+A: JavaScript async fetch() sends POST requests with JSON body to Flask
+    endpoints (/length_control, /homonym_detector, /info_gap). Flask returns
+    JSON responses. JavaScript parses the JSON and dynamically renders HTML
+    result cards.
+
+Q14: What is the ±2 word tolerance in length control?
+A: The system considers output successful if the final word count is within
+    2 words of the target (e.g., target 10 accepts 8-12 words). This accounts
+    for natural language constraints where hitting an exact count may require
+    unnatural phrasing.
+
+Q15: What are the 5 layers in info gap detection?
+A: Layer 1: Intent classification (keyword + spaCy). Layer 2: Multi-entity
+    extraction (spaCy NER + regex + keyword fallback). Layer 3: Per-intent
+    required field rules. Layer 4: Multi-sentence independent analysis.
+    Layer 5: Confidence filtering (skip casual/general statements).
+
+================================================================================
+                           END OF TECHNICAL OVERVIEW
+================================================================================
