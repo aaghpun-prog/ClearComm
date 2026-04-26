@@ -1,30 +1,296 @@
 """
-length_control.py — Practical Hybrid Length Control System
+length_control.py — AI-Powered Length Control with Gemini API
 
 Architecture:
-  Mode A: COMPRESSION (target < original) — deterministic extractive summarization
-  Mode B: EXPANSION (target > original) — pattern-based elaboration
-  Mode C: REFINEMENT (target ≈ original) — grammar/polish pass
+  Primary: Gemini API (gemini-2.5-flash) for intelligent rewriting
+  Fallback: Deterministic rule-based engine (original logic preserved)
 
-T5 is used ONLY as optional secondary polish. All core logic is rule-based.
+Modes:
+  A) Compression — target < original
+  B) Expansion   — target > original
+  C) Refinement  — target ≈ original
 """
 
 import nltk
 import os
 import re
+import time
+import logging
 from utils.preprocess import get_words, get_sentences, get_spacy_doc
 
-# Ensure NLTK data path is set
+# ---------------------------------------------------------------------------
+# LOGGING
+# ---------------------------------------------------------------------------
+logger = logging.getLogger("length_control")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("[LengthCtrl] %(message)s"))
+    logger.addHandler(_h)
+
+# ---------------------------------------------------------------------------
+# NLTK PATH
+# ---------------------------------------------------------------------------
 NLTK_DATA_PATH = os.path.join(os.getcwd(), 'nltk_data')
 if NLTK_DATA_PATH not in nltk.data.path:
     nltk.data.path.insert(0, NLTK_DATA_PATH)
 
-# ±2 word tolerance
 WORD_TOLERANCE = 2
 
 # ---------------------------------------------------------------------------
-# LINGUISTIC RESOURCES
+# GEMINI CLIENT (lazy singleton)
 # ---------------------------------------------------------------------------
+_gemini_client = None
+_GEMINI_MODEL = "gemini-2.5-flash"
+
+def _get_gemini_client():
+    """Lazy-load Gemini client. Returns None if unavailable."""
+    global _gemini_client
+    if _gemini_client is not None:
+        return _gemini_client
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        logger.warning("GEMINI_API_KEY not set — will use fallback engine")
+        return None
+    try:
+        from google import genai
+        _gemini_client = genai.Client(api_key=api_key)
+        logger.info("Gemini client initialised")
+        return _gemini_client
+    except Exception as e:
+        logger.error(f"Gemini init failed: {e}")
+        return None
+
+
+# ============================================================================
+# GEMINI REWRITING ENGINE
+# ============================================================================
+
+def _build_prompt(text: str, target: int, original_count: int) -> str:
+    if target < original_count:
+        mode_instruction = (
+            "COMPRESS the text. Rewrite it shorter while preserving the core meaning. "
+            "Remove unnecessary details but keep the sentence grammatically complete and natural."
+        )
+    elif target > original_count:
+        mode_instruction = (
+            "EXPAND the text. Add relevant context, clarification, or detail to make it longer. "
+            "Do NOT add random filler words. Every added word must contribute meaningfully."
+        )
+    else:
+        mode_instruction = (
+            "REFINE the text. Improve grammar, clarity, and style while keeping the same length."
+        )
+
+    return f"""You are a professional English rewriting assistant.
+
+TASK: {mode_instruction}
+
+STRICT RULES:
+- Output MUST be EXACTLY {target} words. Count carefully.
+- Output ONLY the rewritten text — no explanations, no labels, no quotes.
+- Preserve the original meaning strictly.
+- Use natural, professional English.
+- No bullet points or lists.
+- Proper grammar, punctuation, and capitalization.
+- The output must be a complete sentence or paragraph.
+
+ORIGINAL TEXT ({original_count} words):
+{text}
+
+TARGET: exactly {target} words.
+
+Rewritten text:"""
+
+
+def _gemini_rewrite(text: str, target: int, original_count: int) -> str | None:
+    """Call Gemini API with retries. Returns best valid output or None."""
+    client = _get_gemini_client()
+    if client is None:
+        return None
+
+    prompt = _build_prompt(text, target, original_count)
+    best_result = None
+    best_deviation = float('inf')
+    max_attempts = 3
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            logger.info(f"Gemini request attempt {attempt}/{max_attempts}")
+            response = client.models.generate_content(
+                model=_GEMINI_MODEL,
+                contents=prompt,
+            )
+            raw = response.text.strip() if response.text else ""
+
+            # Validate output
+            if not raw:
+                logger.warning(f"Attempt {attempt}: empty response")
+                continue
+            if raw.lower() == text.strip().lower():
+                logger.warning(f"Attempt {attempt}: output identical to input")
+                continue
+            if _has_excessive_repetition(raw):
+                logger.warning(f"Attempt {attempt}: excessive repetition")
+                continue
+
+            wc = _count_words(raw)
+            dev = abs(wc - target)
+
+            if dev <= WORD_TOLERANCE:
+                logger.info(f"Attempt {attempt}: exact match ({wc}w, target {target})")
+                return raw
+
+            if dev < best_deviation:
+                best_deviation = dev
+                best_result = raw
+                logger.info(f"Attempt {attempt}: kept as best ({wc}w, dev {dev})")
+
+            # Retry with tighter prompt
+            prompt = f"""Rewrite the following text to EXACTLY {target} words.
+Your previous attempt was {wc} words which is wrong. Adjust to exactly {target} words.
+Output ONLY the rewritten text.
+
+Original: {text}
+
+Rewritten ({target} words):"""
+
+        except Exception as e:
+            logger.error(f"Attempt {attempt} failed: {e}")
+            continue
+
+    return best_result
+
+
+# ============================================================================
+# RULE-BASED LENGTH ANALYSIS (for report_generator — PRESERVED)
+# ============================================================================
+
+def analyze_length(text: str, sentences: list, words: list) -> list:
+    """
+    Rule-based length analysis that flags sentences which are too long or too short.
+    Returns a list of issue dictionaries for the report generator.
+    """
+    issues = []
+
+    # Flag overly long sentences (> 30 words)
+    for sent in sentences:
+        sent_words = get_words(sent)
+        if len(sent_words) > 30:
+            issues.append({
+                "type": "length",
+                "severity": "warning",
+                "message": f"Sentence is too long ({len(sent_words)} words). Consider splitting it.",
+                "sentence": sent
+            })
+
+    # Flag very short paragraphs that may lack detail (< 5 words)
+    if len(words) < 5:
+        issues.append({
+            "type": "length",
+            "severity": "info",
+            "message": f"Text is very short ({len(words)} words). It may lack sufficient detail.",
+            "sentence": text
+        })
+
+    return issues
+
+
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
+
+def _count_words(text: str) -> int:
+    return len(text.split())
+
+
+def _get_doc(text: str):
+    try:
+        return get_spacy_doc(text)
+    except Exception:
+        return None
+
+
+def _has_excessive_repetition(text: str) -> bool:
+    stop = {'the', 'a', 'an', 'and', 'or', 'of', 'in', 'to', 'for', 'is',
+            'are', 'was', 'were', 'with', 'that', 'this', 'it', 'on', 'by', 'as'}
+    counts = {}
+    for w in text.lower().split():
+        c = w.strip('.,!?;:')
+        if c and c not in stop:
+            counts[c] = counts.get(c, 0) + 1
+    return any(v > 3 for v in counts.values())
+
+
+# ============================================================================
+# POST-PROCESSING PIPELINE
+# ============================================================================
+
+DANGLING_ENDINGS = frozenset({
+    'and', 'but', 'or', 'nor', 'yet', 'so', 'for', 'with', 'without',
+    'in', 'on', 'at', 'to', 'of', 'by', 'from', 'as', 'if', 'the',
+    'a', 'an', 'is', 'are', 'was', 'were', 'be', 'that', 'which',
+    'who', 'whose', 'where', 'when', 'while', 'because', 'since',
+    'although', 'its', 'their', 'our', 'your', 'my', 'his', 'her',
+    'this', 'these', 'those', 'such', 'very', 'also', 'not', 'no',
+})
+
+
+def _postprocess(text: str) -> str:
+    if not text or not text.strip():
+        return text
+
+    # Normalize whitespace
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    # Remove consecutive duplicate words
+    words = text.split()
+    if len(words) > 1:
+        cleaned = [words[0]]
+        for w in words[1:]:
+            if w.lower().strip('.,!?;:') != cleaned[-1].lower().strip('.,!?;:'):
+                cleaned.append(w)
+        text = ' '.join(cleaned)
+
+    # Remove comma spam
+    text = re.sub(r'(,\s*){2,}', ', ', text)
+
+    # Clean trailing dangling words
+    words = text.split()
+    removed = 0
+    while words and removed < 3:
+        last = words[-1].lower().strip('.,!?;:"\'-')
+        if last in DANGLING_ENDINGS:
+            words.pop()
+            removed += 1
+        else:
+            break
+    text = ' '.join(words) if words else text
+
+    # Ensure final punctuation
+    text = text.rstrip().rstrip(',;:-').rstrip()
+    if text and text[-1] not in '.!?':
+        text += '.'
+
+    # Capitalize first letter
+    if text and text[0].islower():
+        text = text[0].upper() + text[1:]
+
+    # Normalize quotes
+    text = text.replace('"', '"').replace('"', '"')
+    text = text.replace(''', "'").replace(''', "'")
+
+    return text
+
+
+# ============================================================================
+# DETERMINISTIC FALLBACK ENGINES (original logic preserved)
+# ============================================================================
 
 FILLER_WORDS = frozenset({
     'very', 'really', 'actually', 'basically', 'essentially', 'literally',
@@ -67,7 +333,6 @@ PHRASE_SHORTCUTS = [
     ('various different', 'various'),
     ('as well as', 'and'),
 ]
-# Sort longest first so longer phrases match before shorter substrings
 PHRASE_SHORTCUTS.sort(key=lambda x: -len(x[0]))
 
 ABBREVIATION_MAP = {
@@ -90,169 +355,16 @@ TEMPORAL_WORDS = frozenset({
 
 TEMPORAL_PREFIXES = frozenset({'next', 'last', 'this', 'every'})
 
-DANGLING_ENDINGS = frozenset({
-    'and', 'but', 'or', 'nor', 'yet', 'so', 'for', 'with', 'without',
-    'in', 'on', 'at', 'to', 'of', 'by', 'from', 'as', 'if', 'the',
-    'a', 'an', 'is', 'are', 'was', 'were', 'be', 'that', 'which',
-    'who', 'whose', 'where', 'when', 'while', 'because', 'since',
-    'although', 'its', 'their', 'our', 'your', 'my', 'his', 'her',
-    'this', 'these', 'those', 'such', 'very', 'also', 'not', 'no',
-})
 
-
-# =============================================================================
-# RULE-BASED LENGTH ANALYSIS (for report_generator — PRESERVED)
-# =============================================================================
-
-def analyze_length(text: str, sentences: list, words: list) -> list:
-    """
-    Rule-based length analysis that flags sentences which are too long or too short.
-    Returns a list of issue dictionaries for the report generator.
-    """
-    issues = []
-
-    # Flag overly long sentences (> 30 words)
-    for sent in sentences:
-        sent_words = get_words(sent)
-        if len(sent_words) > 30:
-            issues.append({
-                "type": "length",
-                "severity": "warning",
-                "message": f"Sentence is too long ({len(sent_words)} words). Consider splitting it.",
-                "sentence": sent
-            })
-
-    # Flag very short paragraphs that may lack detail (< 5 words)
-    if len(words) < 5:
-        issues.append({
-            "type": "length",
-            "severity": "info",
-            "message": f"Text is very short ({len(words)} words). It may lack sufficient detail.",
-            "sentence": text
-        })
-
-    return issues
-
-
-# =============================================================================
-# UTILITY FUNCTIONS
-# =============================================================================
-
-def _count_words(text: str) -> int:
-    """Count words using whitespace split."""
-    return len(text.split())
-
-
-def _get_doc(text: str):
-    """Get spaCy doc with graceful fallback."""
-    try:
-        return get_spacy_doc(text)
-    except Exception:
-        return None
-
-
-# =============================================================================
-# POST-PROCESSING PIPELINE (always applied)
-# =============================================================================
-
-def _postprocess(text: str) -> str:
-    """
-    Mandatory cleanup:
-      1. Fix whitespace
-      2. Remove consecutive duplicate words
-      3. Remove comma spam
-      4. Clean trailing fragments
-      5. Ensure punctuation
-      6. Capitalize first letter
-    """
-    if not text or not text.strip():
-        return text
-
-    # 1. Normalize whitespace
-    text = re.sub(r'\s+', ' ', text).strip()
-
-    # 2. Remove consecutive duplicate words
-    words = text.split()
-    if len(words) > 1:
-        cleaned = [words[0]]
-        for w in words[1:]:
-            if w.lower().strip('.,!?;:') != cleaned[-1].lower().strip('.,!?;:'):
-                cleaned.append(w)
-        text = ' '.join(cleaned)
-
-    # 3. Remove comma spam (3+ commas in a row after splitting)
-    text = re.sub(r'(,\s*){2,}', ', ', text)
-
-    # 4. Clean trailing dangling words
-    words = text.split()
-    removed = 0
-    while words and removed < 3:
-        last = words[-1].lower().strip('.,!?;:"\'-')
-        if last in DANGLING_ENDINGS:
-            words.pop()
-            removed += 1
-        else:
-            break
-    text = ' '.join(words) if words else text
-
-    # 5. Ensure final punctuation
-    text = text.rstrip()
-    text = text.rstrip(',;:-')
-    text = text.rstrip()
-    if text and text[-1] not in '.!?':
-        text += '.'
-
-    # 6. Capitalize first letter
-    if text and text[0].islower():
-        text = text[0].upper() + text[1:]
-
-    return text
-
-
-# =============================================================================
-# INPUT ANALYSIS
-# =============================================================================
-
-def _analyze_input(text: str, target: int) -> dict:
-    """Detect mode and gather input statistics."""
-    original_count = _count_words(text)
-    sentences = get_sentences(text)
-    diff = target - original_count
-
-    if abs(diff) <= WORD_TOLERANCE:
-        mode = 'refine'
-    elif diff < 0:
-        mode = 'compress'
-    else:
-        mode = 'expand'
-
-    return {
-        'original_count': original_count,
-        'sentences': sentences,
-        'sentence_count': len(sentences),
-        'target': target,
-        'diff': diff,
-        'mode': mode,
-    }
-
-
-# =============================================================================
-# MODE A: COMPRESSION ENGINE
-# =============================================================================
-
-def _shorten_phrases(text: str) -> str:
-    """Replace verbose phrases with shorter equivalents."""
+def _shorten_phrases(text):
     result = text
     for long_phrase, short_phrase in PHRASE_SHORTCUTS:
         pattern = re.compile(re.escape(long_phrase), re.IGNORECASE)
         result = pattern.sub(short_phrase, result)
-    # Clean up double spaces from removals
-    result = re.sub(r'\s+', ' ', result).strip()
-    return result
+    return re.sub(r'\s+', ' ', result).strip()
 
 
-def _remove_fillers(text: str) -> str:
-    """Remove filler/hedge words that add no meaning."""
+def _remove_fillers(text):
     words = text.split()
     if len(words) <= 3:
         return text
@@ -265,35 +377,25 @@ def _remove_fillers(text: str) -> str:
     return ' '.join(result)
 
 
-def _score_sentence(sent: str, position: int, total: int) -> float:
-    """Score sentence importance using POS tags + position."""
+def _score_sentence(sent, position, total):
     doc = _get_doc(sent)
     words = sent.split()
     if not words:
         return 0.0
-
-    # Content word density
     if doc:
         content = sum(1 for t in doc if t.pos_ in ('NOUN', 'PROPN', 'VERB', 'NUM'))
     else:
         content = sum(1 for w in words if len(w) > 3)
-
     density = content / len(words)
-
-    # Position bonus: first sentence usually most important
     bonus = 1.3 if position == 0 else 1.0
     return density * bonus
 
 
-def _compress_single_sentence(text: str, target: int) -> str:
-    """Compress one sentence by removing least important words."""
+def _compress_single_sentence(text, target):
     doc = _get_doc(text)
     words = text.split()
-
     if not doc or len(words) <= target:
         return ' '.join(words[:target])
-
-    # Score each token by POS importance
     scored = []
     for i, token in enumerate(doc):
         if i >= len(words):
@@ -314,46 +416,55 @@ def _compress_single_sentence(text: str, target: int) -> str:
             score = 0.1
         else:
             score = 1.0
-        # Boost first/last tokens for sentence structure
         if i == 0:
             score *= 1.5
         scored.append((score, i))
-
-    # Keep the top-N most important words, preserving original order
     scored.sort(key=lambda x: -x[0])
     keep = set(s[1] for s in scored[:target])
     result = [words[i] for i in sorted(keep) if i < len(words)]
     return ' '.join(result)
 
 
-def _compress(text: str, target: int, info: dict) -> str:
-    """
-    Deterministic compression:
-      1. Shorten verbose phrases
-      2. Remove filler words
-      3. Select important sentences (if multi-sentence)
-      4. Compress at word level if single sentence
-      5. Smart trim to target
-    """
+def _smart_trim(text, target):
+    words = text.split()
+    if len(words) <= target:
+        return text
+    candidate_words = words[:target + WORD_TOLERANCE]
+    for i in range(min(len(candidate_words) - 1, target + WORD_TOLERANCE - 1),
+                   max(0, target - WORD_TOLERANCE - 1), -1):
+        if candidate_words[i].rstrip().endswith(('.', '!', '?')):
+            candidate = ' '.join(candidate_words[:i + 1])
+            if abs(_count_words(candidate) - target) <= WORD_TOLERANCE:
+                return candidate
+    result = ' '.join(words[:target])
+    rwords = result.split()
+    removed = 0
+    while rwords and removed < 2:
+        if rwords[-1].lower().strip('.,!?;:') in DANGLING_ENDINGS:
+            rwords.pop()
+            removed += 1
+        else:
+            break
+    result = ' '.join(rwords)
+    if result and result[-1] not in '.!?':
+        result = result.rstrip(',;:-') + '.'
+    return result
+
+
+def _fallback_compress(text, target, info):
     result = _shorten_phrases(text)
     result = _remove_fillers(result)
-
     if abs(_count_words(result) - target) <= WORD_TOLERANCE:
         return result
-
     current = _count_words(result)
-
     if current > target + WORD_TOLERANCE:
         sentences = get_sentences(result)
-
         if len(sentences) > 1:
-            # Score sentences and greedily select the best ones
             scored = []
             for i, s in enumerate(sentences):
                 sc = _score_sentence(s, i, len(sentences))
                 scored.append((sc, i, s))
             scored.sort(key=lambda x: -x[0])
-
             selected = set()
             running = 0
             for sc, idx, s in scored:
@@ -363,278 +474,105 @@ def _compress(text: str, target: int, info: dict) -> str:
                     running += wc
             if not selected:
                 selected.add(scored[0][1])
-
             result = ' '.join(sentences[i] for i in sorted(selected))
-
-            # If still over, compress the combined text at word level
             if _count_words(result) > target + WORD_TOLERANCE:
                 result = _compress_single_sentence(result, target)
         else:
             result = _compress_single_sentence(result, target)
-
-    # Final smart trim
     if _count_words(result) > target + WORD_TOLERANCE:
         result = _smart_trim(result, target)
-
     return result
 
 
-# =============================================================================
-# MODE B: EXPANSION ENGINE
-# =============================================================================
-
-def _expand_abbreviations(text: str) -> str:
-    """Expand known abbreviations to full forms."""
-    words = text.split()
-    result = []
+def _fallback_expand(text, target, info):
+    result = text
+    # Expand abbreviations
+    words = result.split()
+    expanded = []
     for word in words:
-        # Separate trailing punctuation
         core = word.rstrip('.,!?;:"\'-')
         suffix = word[len(core):]
         if core in ABBREVIATION_MAP:
-            result.append(ABBREVIATION_MAP[core] + suffix)
+            expanded.append(ABBREVIATION_MAP[core] + suffix)
         else:
-            result.append(word)
-    return ' '.join(result)
-
-
-def _is_fragment(text: str) -> bool:
-    """Check if text is a sentence fragment (no main verb)."""
-    doc = _get_doc(text)
-    if doc is None:
-        return _count_words(text) <= 4
-    return not any(t.pos_ == 'VERB' for t in doc)
-
-
-def _has_temporal(text: str) -> bool:
-    """Check if text contains temporal references."""
-    words_lower = set(w.lower().strip('.,!?;:') for w in text.split())
-    return bool(words_lower & TEMPORAL_WORDS)
-
-
-def _structurize_fragment(text: str) -> str:
-    """Convert a fragment into a complete sentence."""
-    doc = _get_doc(text)
-    if doc is None:
-        return text
-
-    words = text.split()
-    words_lower = [w.lower().strip('.,!?;:') for w in words]
-
-    # Separate subject part from temporal part
-    subject_parts = []
-    time_parts = []
-    in_time = False
-
-    for i, wl in enumerate(words_lower):
-        if wl in TEMPORAL_PREFIXES and i + 1 < len(words_lower) and words_lower[i + 1] in TEMPORAL_WORDS:
-            in_time = True
-        if wl in TEMPORAL_WORDS or in_time:
-            time_parts.append(words[i])
-            in_time = False
-        else:
-            subject_parts.append(words[i])
-
-    if subject_parts and time_parts:
-        subj = ' '.join(subject_parts).strip('.,!?')
-        time = ' '.join(time_parts).strip('.,!?')
-        # Add article if subject doesn't start with one
-        if doc[0].pos_ != 'DET' and doc[0].pos_ != 'PROPN':
-            subj = 'The ' + subj[0].lower() + subj[1:]
-        return f"{subj} is scheduled for {time}"
-    elif subject_parts:
-        subj = ' '.join(subject_parts).strip('.,!?')
-        if doc[0].pos_ != 'DET' and doc[0].pos_ != 'PROPN':
-            subj = 'The ' + subj[0].lower() + subj[1:]
-        return f"{subj} is being planned"
-
-    return text
-
-
-def _add_modifiers(text: str, words_needed: int) -> str:
-    """Add adjectives/adverbs before key nouns/verbs to increase word count."""
-    doc = _get_doc(text)
-    if doc is None or words_needed <= 0:
-        return text
-
-    noun_mods = ['important', 'key', 'relevant', 'comprehensive',
-                 'effective', 'significant', 'essential', 'valuable']
-    verb_mods = ['effectively', 'efficiently', 'significantly',
-                 'systematically', 'proactively', 'successfully']
-
-    tokens = list(doc)
-    result = []
-    n_idx = 0
-    v_idx = 0
-    added = 0
-
-    for token in tokens:
-        if added >= words_needed:
-            result.append(token.text)
-            continue
-
-        # Add adjective before unmodified nouns
-        if token.pos_ in ('NOUN',) and token.dep_ not in ('compound',):
-            has_adj = any(c.pos_ == 'ADJ' for c in token.children)
-            if not has_adj and n_idx < len(noun_mods):
-                result.append(noun_mods[n_idx])
-                n_idx += 1
-                added += 1
-
-        # Add adverb after verbs
-        if token.pos_ == 'VERB' and token.dep_ != 'aux':
-            has_adv = any(c.pos_ == 'ADV' for c in token.children)
-            if not has_adv and v_idx < len(verb_mods):
-                result.append(token.text)
-                result.append(verb_mods[v_idx])
-                v_idx += 1
-                added += 1
+            expanded.append(word)
+    result = ' '.join(expanded)
+    if _count_words(result) >= target - WORD_TOLERANCE:
+        return result
+    # Structurize fragments
+    doc = _get_doc(result)
+    if doc and not any(t.pos_ == 'VERB' for t in doc):
+        wds = result.split()
+        wds_lower = [w.lower().strip('.,!?;:') for w in wds]
+        subject_parts, time_parts = [], []
+        in_time = False
+        for i, wl in enumerate(wds_lower):
+            if wl in TEMPORAL_PREFIXES and i + 1 < len(wds_lower) and wds_lower[i + 1] in TEMPORAL_WORDS:
+                in_time = True
+            if wl in TEMPORAL_WORDS or in_time:
+                time_parts.append(wds[i])
+                in_time = False
+            else:
+                subject_parts.append(wds[i])
+        if subject_parts and time_parts:
+            subj = ' '.join(subject_parts).strip('.,!?')
+            tm = ' '.join(time_parts).strip('.,!?')
+            if doc[0].pos_ not in ('DET', 'PROPN'):
+                subj = 'The ' + subj[0].lower() + subj[1:]
+            result = f"{subj} is scheduled for {tm}"
+        elif subject_parts:
+            subj = ' '.join(subject_parts).strip('.,!?')
+            if doc[0].pos_ not in ('DET', 'PROPN'):
+                subj = 'The ' + subj[0].lower() + subj[1:]
+            result = f"{subj} is being planned"
+    if _count_words(result) >= target - WORD_TOLERANCE:
+        return result
+    # Add modifiers
+    doc = _get_doc(result)
+    if doc:
+        noun_mods = ['important', 'key', 'relevant', 'comprehensive', 'effective', 'significant']
+        verb_mods = ['effectively', 'efficiently', 'significantly', 'systematically']
+        tokens = list(doc)
+        res = []
+        n_idx = v_idx = added = 0
+        words_needed = target - _count_words(result)
+        for token in tokens:
+            if added >= words_needed:
+                res.append(token.text)
                 continue
-
-        result.append(token.text)
-
-    return ' '.join(result)
-
-
-def _expand(text: str, target: int, info: dict) -> str:
-    """
-    Deterministic expansion:
-      1. Expand abbreviations
-      2. Structurize fragments (add verb/article)
-      3. Add contextual modifiers
-    """
-    result = _expand_abbreviations(text)
-
-    if _count_words(result) >= target - WORD_TOLERANCE:
-        return result
-
-    # If it's a fragment, build a full sentence
-    if _is_fragment(result):
-        result = _structurize_fragment(result)
-
-    if _count_words(result) >= target - WORD_TOLERANCE:
-        return result
-
-    # Add modifiers to reach target
-    words_needed = target - _count_words(result)
-    if words_needed > 0:
-        result = _add_modifiers(result, words_needed)
-
+            if token.pos_ == 'NOUN' and token.dep_ != 'compound':
+                if not any(c.pos_ == 'ADJ' for c in token.children) and n_idx < len(noun_mods):
+                    res.append(noun_mods[n_idx])
+                    n_idx += 1
+                    added += 1
+            if token.pos_ == 'VERB' and token.dep_ != 'aux':
+                if not any(c.pos_ == 'ADV' for c in token.children) and v_idx < len(verb_mods):
+                    res.append(token.text)
+                    res.append(verb_mods[v_idx])
+                    v_idx += 1
+                    added += 1
+                    continue
+            res.append(token.text)
+        result = ' '.join(res)
     return result
 
 
-# =============================================================================
-# MODE C: REFINEMENT ENGINE
-# =============================================================================
-
-def _refine(text: str) -> str:
-    """Polish grammar and readability without changing length much."""
+def _fallback_refine(text):
     result = _shorten_phrases(text)
     result = _remove_fillers(result)
     return result
 
 
-# =============================================================================
-# SMART TRIM (sentence-boundary aware)
-# =============================================================================
-
-def _smart_trim(text: str, target: int) -> str:
-    """Trim to target words, preferring sentence boundaries."""
-    words = text.split()
-    if len(words) <= target:
-        return text
-
-    # Look for sentence boundary near target
-    candidate_words = words[:target + WORD_TOLERANCE]
-    for i in range(min(len(candidate_words) - 1, target + WORD_TOLERANCE - 1),
-                   max(0, target - WORD_TOLERANCE - 1), -1):
-        if candidate_words[i].rstrip().endswith(('.', '!', '?')):
-            candidate = ' '.join(candidate_words[:i + 1])
-            if abs(_count_words(candidate) - target) <= WORD_TOLERANCE:
-                return candidate
-
-    # No good boundary — hard cut + cleanup
-    result = ' '.join(words[:target])
-    # Remove trailing dangling words
-    rwords = result.split()
-    removed = 0
-    while rwords and removed < 2:
-        if rwords[-1].lower().strip('.,!?;:') in DANGLING_ENDINGS:
-            rwords.pop()
-            removed += 1
-        else:
-            break
-
-    result = ' '.join(rwords)
-    if result and result[-1] not in '.!?':
-        result = result.rstrip(',;:-') + '.'
-    return result
-
-
-# =============================================================================
-# OPTIONAL T5 POLISH (secondary only)
-# =============================================================================
-
-def _try_t5_polish(text: str, original: str, target: int) -> str | None:
-    """
-    Try Flan-T5 as optional polish. Returns None if output is bad.
-    Used ONLY when deterministic output needs smoothing.
-    """
-    try:
-        from models.transformer_loader import get_models
-        models = get_models()
-        raw = models.rewrite_text(original, target)
-
-        if not raw or not raw.strip():
-            return None
-
-        raw_wc = _count_words(raw)
-
-        # Reject if T5 output is terrible
-        if abs(raw_wc - target) > max(target * 0.4, 8):
-            return None  # Way off target
-        if raw.strip().lower() == original.strip().lower():
-            return None  # Just copied input
-        if _has_excessive_repetition(raw):
-            return None  # Nonsense repetition
-
-        return raw
-    except Exception:
-        return None
-
-
-def _has_excessive_repetition(text: str) -> bool:
-    """Check if any content word repeats more than 3 times."""
-    stop = {'the', 'a', 'an', 'and', 'or', 'of', 'in', 'to', 'for', 'is',
-            'are', 'was', 'were', 'with', 'that', 'this', 'it', 'on', 'by', 'as'}
-    counts = {}
-    for w in text.lower().split():
-        c = w.strip('.,!?;:')
-        if c and c not in stop:
-            counts[c] = counts.get(c, 0) + 1
-    return any(v > 3 for v in counts.values())
-
-
-# =============================================================================
-# TARGET ENFORCEMENT
-# =============================================================================
-
-def _enforce_target(text: str, original: str, target: int) -> str:
-    """Ensure output is within ±WORD_TOLERANCE of target."""
+def _enforce_target(text, original, target):
     count = _count_words(text)
-
     if abs(count - target) <= WORD_TOLERANCE:
         return text
-
     if count > target + WORD_TOLERANCE:
         return _smart_trim(text, target)
-
     if count < target - WORD_TOLERANCE:
-        # Try to extend by borrowing words from original
         words_needed = target - count
         orig_words = original.split()
         current_lower = set(w.lower().strip('.,!?;:') for w in text.split())
-
         extras = []
         for w in orig_words:
             c = w.lower().strip('.,!?;:')
@@ -643,31 +581,53 @@ def _enforce_target(text: str, original: str, target: int) -> str:
                 current_lower.add(c)
             if len(extras) >= words_needed:
                 break
-
         if extras:
             base = text.rstrip('.!?')
             result = base + ' ' + ' '.join(extras[:words_needed]) + '.'
             if _count_words(result) > target + WORD_TOLERANCE:
                 result = _smart_trim(result, target)
             return result
-
     return text
 
 
-# =============================================================================
+# ============================================================================
+# INPUT ANALYSIS
+# ============================================================================
+
+def _analyze_input(text, target):
+    original_count = _count_words(text)
+    sentences = get_sentences(text)
+    diff = target - original_count
+    if abs(diff) <= WORD_TOLERANCE:
+        mode = 'refine'
+    elif diff < 0:
+        mode = 'compress'
+    else:
+        mode = 'expand'
+    return {
+        'original_count': original_count,
+        'sentences': sentences,
+        'sentence_count': len(sentences),
+        'target': target,
+        'diff': diff,
+        'mode': mode,
+    }
+
+
+# ============================================================================
 # MAIN API
-# =============================================================================
+# ============================================================================
 
 def analyze_length_and_rewrite(text: str, target_word_count: int) -> dict:
     """
-    Rewrites text to target word count using a practical hybrid system.
+    Rewrites text to target word count using Gemini AI with deterministic fallback.
 
     Pipeline:
-      1. Analyze input → determine mode (compress/expand/refine)
-      2. Run deterministic mode-specific engine
-      3. Optionally try T5 polish (secondary, only if result needs it)
-      4. Apply post-processing
-      5. Enforce target ±2
+      1. Analyze input -> determine mode
+      2. Try Gemini AI rewrite (up to 3 attempts)
+      3. If Gemini fails/unavailable, use deterministic fallback engine
+      4. Post-process and enforce target ±2
+      5. Return compatible JSON response
 
     Returns dict compatible with existing frontend.
     """
@@ -678,55 +638,72 @@ def analyze_length_and_rewrite(text: str, target_word_count: int) -> dict:
             "target_word_count": target_word_count,
             "rewritten_text": text or "",
             "final_word_count": 0,
+            "deviation": 0,
             "status": "error",
             "message": "Empty input text"
         }
 
     target_word_count = max(3, target_word_count)
-
-    # 1. Analyze input
     info = _analyze_input(text, target_word_count)
     original_count = info['original_count']
 
-    # Edge case: already within tolerance
+    # Near-equal mode: quick refine
     if info['mode'] == 'refine':
-        refined = _postprocess(_refine(text))
-        final_count = _count_words(refined)
+        # Try Gemini even for refinement
+        gemini_out = _gemini_rewrite(text, target_word_count, original_count)
+        if gemini_out:
+            result = _postprocess(gemini_out)
+        else:
+            result = _postprocess(_fallback_refine(text))
+        final_count = _count_words(result)
         return {
             "original_word_count": original_count,
             "target_word_count": target_word_count,
-            "rewritten_text": refined,
+            "rewritten_text": result,
             "final_word_count": final_count,
             "deviation": final_count - target_word_count,
             "status": "success",
             "message": "Text refined — already near target length"
         }
 
-    # 2. Run deterministic engine based on mode
-    if info['mode'] == 'compress':
-        result = _compress(text, target_word_count, info)
-    else:
-        result = _expand(text, target_word_count, info)
+    # --- Primary: Gemini AI rewrite ---
+    used_gemini = False
+    gemini_out = _gemini_rewrite(text, target_word_count, original_count)
 
-    # 3. Post-process
-    result = _postprocess(result)
+    if gemini_out:
+        result = _postprocess(gemini_out)
+        wc = _count_words(result)
+        if abs(wc - target_word_count) <= WORD_TOLERANCE:
+            used_gemini = True
+            logger.info(f"Gemini output accepted ({wc}w)")
+        else:
+            # Try enforcement on Gemini output
+            enforced = _enforce_target(result, text, target_word_count)
+            enforced = _postprocess(enforced)
+            ewc = _count_words(enforced)
+            if abs(ewc - target_word_count) <= WORD_TOLERANCE:
+                result = enforced
+                used_gemini = True
+                logger.info(f"Gemini output enforced to {ewc}w")
+            else:
+                # Gemini was close but not perfect — still may be better than fallback
+                result = enforced
+                used_gemini = True
+                logger.info(f"Gemini best effort: {ewc}w (target {target_word_count})")
 
-    # 4. Try T5 polish if deterministic result is far from target
-    det_diff = abs(_count_words(result) - target_word_count)
-    if det_diff > WORD_TOLERANCE:
-        t5_output = _try_t5_polish(result, text, target_word_count)
-        if t5_output:
-            t5_processed = _postprocess(t5_output)
-            t5_diff = abs(_count_words(t5_processed) - target_word_count)
-            # Use T5 only if it's actually better
-            if t5_diff < det_diff:
-                result = t5_processed
+    if not used_gemini:
+        # --- Fallback: deterministic engine ---
+        logger.info("Using fallback deterministic engine")
+        if info['mode'] == 'compress':
+            result = _fallback_compress(text, target_word_count, info)
+        else:
+            result = _fallback_expand(text, target_word_count, info)
 
-    # 5. Enforce strict target
-    result = _enforce_target(result, text, target_word_count)
-    result = _postprocess(result)
+        result = _postprocess(result)
+        result = _enforce_target(result, text, target_word_count)
+        result = _postprocess(result)
 
-    # 6. Build response
+    # Final response
     final_count = _count_words(result)
     deviation = final_count - target_word_count
 
@@ -736,6 +713,9 @@ def analyze_length_and_rewrite(text: str, target_word_count: int) -> dict:
     else:
         status = "partial"
         message = f"Best effort: {final_count} words (target: {target_word_count})"
+
+    engine = "gemini" if used_gemini else "fallback"
+    logger.info(f"Final: {final_count}w | target: {target_word_count} | engine: {engine} | status: {status}")
 
     return {
         "original_word_count": original_count,
