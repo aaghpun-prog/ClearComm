@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ClearComm — AI Text Clarity Suite</title>
-    <meta name="description" content="ClearComm: AI-powered text clarity analysis with homonym detection, length control, and information gap detection.">
+    <meta name="description"
+        content="ClearComm: AI-powered text clarity analysis with homonym detection, length control, and information gap detection.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -12,34 +14,40 @@
            DESIGN TOKENS
            ============================================================ */
         :root {
-            --bg:         #0B0F19;
-            --surface:    #111827;
-            --surface-2:  #1a2233;
-            --border:     #1F2937;
-            --border-hover:#374151;
-            --text:       #E5E7EB;
-            --text-dim:   #9CA3AF;
+            --bg: #0B0F19;
+            --surface: #111827;
+            --surface-2: #1a2233;
+            --border: #1F2937;
+            --border-hover: #374151;
+            --text: #E5E7EB;
+            --text-dim: #9CA3AF;
             --text-faint: #6B7280;
-            --accent:     #7C3AED;
-            --accent-dim: rgba(124,58,237,0.15);
-            --accent-hover:#6D28D9;
-            --secondary:  #38BDF8;
-            --secondary-dim:rgba(56,189,248,0.12);
-            --success:    #34D399;
-            --success-dim:rgba(52,211,153,0.12);
-            --warn:       #FBBF24;
-            --warn-dim:   rgba(251,191,36,0.12);
-            --error:      #F87171;
-            --error-dim:  rgba(248,113,113,0.12);
-            --radius:     10px;
-            --radius-lg:  14px;
+            --accent: #7C3AED;
+            --accent-dim: rgba(124, 58, 237, 0.15);
+            --accent-hover: #6D28D9;
+            --secondary: #38BDF8;
+            --secondary-dim: rgba(56, 189, 248, 0.12);
+            --success: #34D399;
+            --success-dim: rgba(52, 211, 153, 0.12);
+            --warn: #FBBF24;
+            --warn-dim: rgba(251, 191, 36, 0.12);
+            --error: #F87171;
+            --error-dim: rgba(248, 113, 113, 0.12);
+            --radius: 10px;
+            --radius-lg: 14px;
             --transition: 180ms ease;
         }
 
         /* ============================================================
            RESET & BASE
            ============================================================ */
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
         body {
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -69,6 +77,7 @@
             background: var(--surface);
             flex-shrink: 0;
         }
+
         .topbar-brand {
             display: flex;
             align-items: center;
@@ -78,20 +87,32 @@
             letter-spacing: -0.02em;
             color: var(--text);
         }
+
         .topbar-brand .logo-mark {
-            width: 26px; height: 26px;
+            width: 26px;
+            height: 26px;
             border-radius: 7px;
             background: linear-gradient(135deg, var(--accent), var(--secondary));
-            display: flex; align-items: center; justify-content: center;
-            font-size: 13px; font-weight: 700; color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 700;
+            color: #fff;
         }
+
         .topbar-meta {
             font-size: 12px;
             color: var(--text-faint);
-            display: flex; align-items: center; gap: 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
         }
+
         .topbar-meta .dot {
-            width: 6px; height: 6px; border-radius: 50%;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
             background: var(--success);
             display: inline-block;
         }
@@ -109,6 +130,7 @@
         .page-header {
             margin-bottom: 32px;
         }
+
         .page-header h1 {
             font-size: 28px;
             font-weight: 700;
@@ -116,6 +138,7 @@
             color: #fff;
             margin-bottom: 6px;
         }
+
         .page-header p {
             font-size: 14px;
             color: var(--text-dim);
@@ -135,6 +158,7 @@
             margin-bottom: 28px;
             width: fit-content;
         }
+
         .tab-btn {
             background: transparent;
             border: none;
@@ -148,22 +172,38 @@
             transition: all var(--transition);
             white-space: nowrap;
         }
+
         .tab-btn:hover {
             color: var(--text);
-            background: rgba(255,255,255,0.04);
+            background: rgba(255, 255, 255, 0.04);
         }
+
         .tab-btn.active {
             background: var(--accent);
             color: #fff;
-            box-shadow: 0 1px 4px rgba(124,58,237,0.3);
+            box-shadow: 0 1px 4px rgba(124, 58, 237, 0.3);
         }
 
         /* TAB PANELS */
-        .tab-panel { display: none; animation: panelIn 250ms ease; }
-        .tab-panel.active { display: block; }
+        .tab-panel {
+            display: none;
+            animation: panelIn 250ms ease;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
+
         @keyframes panelIn {
-            from { opacity: 0; transform: translateY(6px); }
-            to   { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         /* ============================================================
@@ -175,12 +215,14 @@
             border-radius: var(--radius-lg);
             padding: 32px;
         }
+
         .panel-title {
             font-size: 16px;
             font-weight: 600;
             color: #fff;
             margin-bottom: 4px;
         }
+
         .panel-desc {
             font-size: 13px;
             color: var(--text-faint);
@@ -205,8 +247,15 @@
             transition: border-color var(--transition);
             line-height: 1.6;
         }
-        textarea::placeholder { color: var(--text-faint); }
-        textarea:focus { outline: none; border-color: var(--accent); }
+
+        textarea::placeholder {
+            color: var(--text-faint);
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
 
         .field-row {
             display: flex;
@@ -214,7 +263,13 @@
             gap: 16px;
             margin-top: 20px;
         }
-        .field-group { display: flex; flex-direction: column; gap: 6px; }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
         .field-group label {
             font-size: 12px;
             font-weight: 500;
@@ -222,6 +277,7 @@
             text-transform: uppercase;
             letter-spacing: 0.05em;
         }
+
         .field-group input[type="number"] {
             width: 100px;
             padding: 10px 12px;
@@ -233,7 +289,11 @@
             color: var(--text);
             transition: border-color var(--transition);
         }
-        .field-group input:focus { outline: none; border-color: var(--accent); }
+
+        .field-group input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
 
         /* PRIMARY BUTTON */
         .btn-primary {
@@ -252,10 +312,26 @@
             transition: all var(--transition);
             letter-spacing: -0.01em;
         }
-        .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
-        .btn-primary:active { transform: translateY(0) scale(0.98); }
-        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-        .btn-primary svg { width: 15px; height: 15px; }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0) scale(0.98);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-primary svg {
+            width: 15px;
+            height: 15px;
+        }
 
         /* LOADER */
         .loader-bar {
@@ -266,15 +342,25 @@
             font-size: 13px;
             color: var(--text-dim);
         }
-        .loader-bar.visible { display: flex; }
+
+        .loader-bar.visible {
+            display: flex;
+        }
+
         .loader-spinner {
-            width: 16px; height: 16px;
+            width: 16px;
+            height: 16px;
             border: 2px solid var(--border);
             border-top-color: var(--accent);
             border-radius: 50%;
             animation: spin 0.7s linear infinite;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
 
         /* ============================================================
            RESULT AREA
@@ -283,7 +369,11 @@
             margin-top: 28px;
             display: none;
         }
-        .result-area.visible { display: block; animation: panelIn 250ms ease; }
+
+        .result-area.visible {
+            display: block;
+            animation: panelIn 250ms ease;
+        }
 
         .result-header {
             display: flex;
@@ -296,10 +386,12 @@
             text-transform: uppercase;
             letter-spacing: 0.04em;
         }
+
         .result-header::before {
             content: '';
             display: block;
-            width: 3px; height: 14px;
+            width: 3px;
+            height: 14px;
             border-radius: 2px;
             background: var(--accent);
         }
@@ -311,11 +403,13 @@
             border-radius: var(--radius);
             padding: 24px;
         }
+
         .length-stats {
             display: flex;
             gap: 12px;
             margin-bottom: 18px;
         }
+
         .stat-chip {
             display: inline-flex;
             align-items: center;
@@ -325,10 +419,26 @@
             font-size: 12px;
             font-weight: 600;
         }
-        .stat-chip.original { background: var(--secondary-dim); color: var(--secondary); }
-        .stat-chip.target   { background: var(--warn-dim); color: var(--warn); }
-        .stat-chip.final    { background: var(--success-dim); color: var(--success); }
-        .stat-chip.dev      { background: var(--accent-dim); color: #a78bfa; }
+
+        .stat-chip.original {
+            background: var(--secondary-dim);
+            color: var(--secondary);
+        }
+
+        .stat-chip.target {
+            background: var(--warn-dim);
+            color: var(--warn);
+        }
+
+        .stat-chip.final {
+            background: var(--success-dim);
+            color: var(--success);
+        }
+
+        .stat-chip.dev {
+            background: var(--accent-dim);
+            color: #a78bfa;
+        }
 
         .rewrite-text {
             font-size: 15px;
@@ -349,19 +459,27 @@
             margin-bottom: 10px;
             transition: border-color var(--transition);
         }
-        .homonym-card:hover { border-color: var(--border-hover); }
+
+        .homonym-card:hover {
+            border-color: var(--border-hover);
+        }
+
         .homonym-card-top {
             display: flex;
             align-items: center;
             justify-content: space-between;
             margin-bottom: 10px;
         }
+
         .homonym-word {
             font-size: 15px;
             font-weight: 600;
             color: #fff;
         }
-        .homonym-word span { color: var(--accent); }
+
+        .homonym-word span {
+            color: var(--accent);
+        }
 
         /* CONFIDENCE BADGE */
         .badge {
@@ -375,11 +493,25 @@
             text-transform: uppercase;
             letter-spacing: 0.03em;
         }
-        .badge-high   { background: var(--success-dim); color: var(--success); }
-        .badge-medium { background: var(--warn-dim); color: var(--warn); }
-        .badge-low    { background: var(--error-dim); color: var(--error); }
+
+        .badge-high {
+            background: var(--success-dim);
+            color: var(--success);
+        }
+
+        .badge-medium {
+            background: var(--warn-dim);
+            color: var(--warn);
+        }
+
+        .badge-low {
+            background: var(--error-dim);
+            color: var(--error);
+        }
+
         .badge-dot {
-            width: 5px; height: 5px;
+            width: 5px;
+            height: 5px;
             border-radius: 50%;
             background: currentColor;
         }
@@ -389,7 +521,11 @@
             color: var(--text-dim);
             line-height: 1.5;
         }
-        .homonym-meaning strong { color: var(--success); font-weight: 600; }
+
+        .homonym-meaning strong {
+            color: var(--success);
+            font-weight: 600;
+        }
 
         /* INFO GAP CARDS */
         .gap-card {
@@ -400,6 +536,7 @@
             padding: 16px 20px;
             margin-bottom: 10px;
         }
+
         .gap-label {
             font-size: 12px;
             font-weight: 600;
@@ -407,8 +544,11 @@
             letter-spacing: 0.04em;
             color: var(--warn);
             margin-bottom: 8px;
-            display: flex; align-items: center; gap: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
+
         .gap-sentence {
             font-size: 13px;
             color: var(--text-dim);
@@ -430,8 +570,16 @@
             align-items: center;
             gap: 8px;
         }
-        .empty-state.ok   { background: var(--success-dim); color: var(--success); }
-        .empty-state.err  { background: var(--error-dim); color: var(--error); }
+
+        .empty-state.ok {
+            background: var(--success-dim);
+            color: var(--success);
+        }
+
+        .empty-state.err {
+            background: var(--error-dim);
+            color: var(--error);
+        }
 
         /* STATUS MESSAGE */
         .status-msg {
@@ -451,6 +599,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="app-shell">
         <!-- TOP BAR -->
@@ -474,18 +623,24 @@
 
             <!-- TABS -->
             <div class="tab-bar" role="tablist">
-                <button class="tab-btn active" role="tab" onclick="switchTab('tab-length', this)" id="tab-btn-length">Length Control</button>
-                <button class="tab-btn" role="tab" onclick="switchTab('tab-homonym', this)" id="tab-btn-homonym">Homonym Detector</button>
-                <button class="tab-btn" role="tab" onclick="switchTab('tab-infogap', this)" id="tab-btn-infogap">Info Gap Detector</button>
+                <button class="tab-btn active" role="tab" onclick="switchTab('tab-length', this)"
+                    id="tab-btn-length">Length Control</button>
+                <button class="tab-btn" role="tab" onclick="switchTab('tab-homonym', this)" id="tab-btn-homonym">Homonym
+                    Detector</button>
+                <button class="tab-btn" role="tab" onclick="switchTab('tab-infogap', this)" id="tab-btn-infogap">Info
+                    Gap Detector</button>
             </div>
 
             <!-- ==================== TAB 1: LENGTH CONTROL ==================== -->
             <div id="tab-length" class="tab-panel active">
                 <div class="panel-card">
-                    <div class="panel-title">Rewrite to Target Length</div>
-                    <div class="panel-desc">Uses Flan-T5 with strict post-processing to rewrite text to an exact word count.</div>
+                    <div class="panel-title">Adaptive Length Control</div>
+                    <div class="panel-desc">Gemini AI rewriting engine with retry validation, post-processing, and
+                        deterministic fallback pipelines to compress, expand, or refine text to a target word count.
+                    </div>
 
-                    <textarea id="len-text" placeholder="Paste a paragraph to rewrite to your target word count..."></textarea>
+                    <textarea id="len-text"
+                        placeholder="Paste a paragraph to rewrite to your target word count..."></textarea>
 
                     <div class="field-row">
                         <div class="field-group">
@@ -493,14 +648,18 @@
                             <input type="number" id="len-target" value="25" min="3">
                         </div>
                         <button class="btn-primary" id="len-btn" onclick="runAnalysis('length_control','len')">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 20h9" />
+                                <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+                            </svg>
                             Rewrite
                         </button>
                     </div>
 
                     <div class="loader-bar" id="len-loader">
                         <div class="loader-spinner"></div>
-                        Running Flan-T5 inference...
+                        Running Gemini AI rewrite...
                     </div>
 
                     <div class="result-area" id="len-out">
@@ -513,21 +672,27 @@
             <!-- ==================== TAB 2: HOMONYM DETECTOR ==================== -->
             <div id="tab-homonym" class="tab-panel">
                 <div class="panel-card">
-                    <div class="panel-title">Contextual Homonym Detection</div>
-                    <div class="panel-desc">Identifies ambiguous words using SBERT semantic matching and WordNet definitions.</div>
+                    <div class="panel-title"> 3-Layer Contextual Homonym Detection</div>
+                    <div class="panel-desc">Curated knowledge-base matching, SBERT semantic similarity, and WordNet/WiC
+                        fallback for contextual word-sense disambiguation with confidence scoring.</div>
 
-                    <textarea id="hom-text" placeholder='Try: "I sat on the river bank waiting for a fish" or "She went to the bank to deposit cash"'></textarea>
+                    <textarea id="hom-text"
+                        placeholder='Try: "I sat on the river bank waiting for a fish" or "She went to the bank to deposit cash"'></textarea>
 
                     <div class="field-row">
                         <button class="btn-primary" id="hom-btn" onclick="runAnalysis('homonym_detector','hom')">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="11" cy="11" r="8" />
+                                <path d="M21 21l-4.35-4.35" />
+                            </svg>
                             Analyze Context
                         </button>
                     </div>
 
                     <div class="loader-bar" id="hom-loader">
                         <div class="loader-spinner"></div>
-                        Running SBERT semantic analysis...
+                        Running 3-layer semantic analysis...
                     </div>
 
                     <div class="result-area" id="hom-out">
@@ -540,14 +705,22 @@
             <!-- ==================== TAB 3: INFO GAP ==================== -->
             <div id="tab-infogap" class="tab-panel">
                 <div class="panel-card">
-                    <div class="panel-title">Information Gap Detection</div>
-                    <div class="panel-desc">Uses spaCy NER and zero-shot classification to detect missing context, deadlines, or responsible parties.</div>
+                    <div class="panel-title">5-Layer Information Gap Detection</div>
+                    <div class="panel-desc">Intent classification, spaCy NER, regex extraction, rule-based field
+                        validation, and multi-sentence analysis to detect missing context.</div>
 
-                    <textarea id="gap-text" placeholder='Try: "Submit the final report to management" or "Update the server configuration"'></textarea>
+                    <textarea id="gap-text"
+                        placeholder='Try: "Submit the final report to management" or "Update the server configuration"'></textarea>
 
                     <div class="field-row">
                         <button class="btn-primary" id="gap-btn" onclick="runAnalysis('info_gap','gap')">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path
+                                    d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                <line x1="12" y1="9" x2="12" y2="13" />
+                                <line x1="12" y1="17" x2="12.01" y2="17" />
+                            </svg>
                             Scan for Gaps
                         </button>
                     </div>
@@ -591,11 +764,11 @@
         }
 
         async function runAnalysis(endpoint, prefix) {
-            const textEl   = document.getElementById(`${prefix}-text`);
-            const btnEl    = document.getElementById(`${prefix}-btn`);
+            const textEl = document.getElementById(`${prefix}-text`);
+            const btnEl = document.getElementById(`${prefix}-btn`);
             const loaderEl = document.getElementById(`${prefix}-loader`);
-            const outEl    = document.getElementById(`${prefix}-out`);
-            const jsonEl   = document.getElementById(`${prefix}-json`);
+            const outEl = document.getElementById(`${prefix}-out`);
+            const jsonEl = document.getElementById(`${prefix}-json`);
 
             const text = textEl.value;
             if (!text.trim()) { textEl.focus(); return; }
@@ -688,4 +861,5 @@
         }
     </script>
 </body>
+
 </html>

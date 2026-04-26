@@ -13,6 +13,20 @@ if NLTK_DATA_PATH not in nltk.data.path:
 
 app = Flask(__name__)
 
+# --- Dev: always reload templates on change, never serve stale cache ---
+app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.jinja_env.auto_reload = True
+
+
+@app.after_request
+def add_no_cache_headers(response):
+    """Prevent browser from caching HTML/JSON during development."""
+    if 'text/html' in response.content_type or 'application/json' in response.content_type:
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    return response
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -70,4 +84,4 @@ def info_gap():
 if __name__ == '__main__':
     import os
     port = int(os.environ.get("PORT", 5001))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host="0.0.0.0", port=port, debug=True)
