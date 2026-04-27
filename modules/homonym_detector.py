@@ -127,6 +127,15 @@ HOMONYM_DICT = {
 # Precision settings
 VERB_BLACKLIST = {"go", "do", "make", "get", "set", "run", "went", "is", "was", "are", "were", "has", "have", "had", "be", "been", "being", "will", "would", "shall", "should", "can", "could", "did", "does"}
 
+# Stopwords to skip during multi-occurrence detection
+STOPWORDS = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "from", "as", "is", "was", "are", "were", "be", "been", "being", "it", "its", "this", "that", "i", "he", "she", "we", "they", "my", "his", "her", "our", "your", "their", "not", "no", "so", "if", "up", "out"}
+
+# Context window size (tokens on each side) for multi-occurrence extraction
+CONTEXT_WINDOW_SIZE = 5
+
+# Minimum meaningful words in a context window to consider it valid
+MIN_CONTEXT_WORDS = 3
+
 # Dual-threshold Strategy for Precision vs Demo Reliability
 CURATED_THRESHOLD = 0.15
 CURATED_GAP = 0.01
@@ -157,7 +166,27 @@ def _get_merged_curated_entry(word: str) -> dict:
         return HOMONYM_DICT[word]
     return None
 
-def _try_curated_match(sentence: str, word: str) -> dict:
+def _extract_context_window(tokens: list, target_index: int, window: int = CONTEXT_WINDOW_SIZE) -> str:
+    """
+    Extracts a local context window of ±window tokens around the target_index.
+    Returns the window as a plain string for pipeline consumption.
+    """
+    start = max(0, target_index - window)
+    end = min(len(tokens), target_index + window + 1)
+    return ' '.join(t['text'] for t in tokens[start:end])
+
+
+def _context_has_enough_content(context: str, word: str) -> bool:
+    """
+    Checks if a context window has at least MIN_CONTEXT_WORDS meaningful words
+    (excluding the target word itself and stopwords).
+    """
+    context_tokens = re.findall(r'\b\w+\b', context.lower())
+    meaningful = [t for t in context_tokens if t != word and t not in STOPWORDS and len(t) >= 3]
+    return len(meaningful) >= MIN_CONTEXT_WORDS
+
+
+def _try_curated_match(sentence: str, word: str, local_context: bool = False) -> dict:
     """
     Layer 1: Fast keyword-scoring engine using the curated dataset.
     
@@ -167,6 +196,11 @@ def _try_curated_match(sentence: str, word: str) -> dict:
       3. For each meaning, count how many of its keywords appear in the sentence
       4. If the best meaning has enough hits AND a clear gap over second-best,
          return a confident curated result immediately.
+    
+    When local_context=True (multi-occurrence context window), matching is
+    relaxed: any single keyword hit is sufficient to accept a meaning.
+    This ensures strong context words like "loan", "river" etc. immediately
+    resolve the correct meaning from a short context window.
     
     Returns:
       dict with word/meaning/confidence/score/score_gap if confident match found.
@@ -205,13 +239,28 @@ def _try_curated_match(sentence: str, word: str) -> dict:
     else:
         hit_gap = best_hits  # Only one meaning, gap is the score itself
     
-    # Decision: Is this a confident curated match?
-    if (best_hits >= CURATED_MATCH_MIN_HITS and
-            best_ratio >= CURATED_MATCH_MIN_RATIO and
-            hit_gap >= CURATED_MATCH_MIN_GAP):
-        
+    # ---- Matching decision ----
+    matched = False
+    
+    if local_context:
+        # RELAXED RULE for multi-occurrence context windows:
+        # Any single keyword hit is sufficient — strong context words like
+        # "loan", "river", "money", "water" immediately resolve meaning
+        if best_hits >= 1 and hit_gap >= 0:
+            matched = True
+    else:
+        # STRICT RULE for single-occurrence (full sentence):
+        # Original thresholds preserved exactly
+        if (best_hits >= CURATED_MATCH_MIN_HITS and
+                best_ratio >= CURATED_MATCH_MIN_RATIO and
+                hit_gap >= CURATED_MATCH_MIN_GAP):
+            matched = True
+    
+    if matched:
         # Determine confidence level
         if best_ratio >= CURATED_MATCH_STRONG_RATIO and hit_gap >= 2:
+            confidence_label = "high"
+        elif best_hits >= 2 or (local_context and hit_gap >= 1):
             confidence_label = "high"
         elif best_ratio >= CURATED_MATCH_MIN_RATIO:
             confidence_label = "medium"
@@ -382,6 +431,65 @@ def _assign_confidence_label(result: dict, is_curated: bool) -> dict:
     
     return result
 
+
+def _run_single_occurrence_pipeline(context: str, word: str, is_curated: bool) -> dict:
+    """
+    Runs the full 3-layer pipeline for a single occurrence of a word
+    using the given context string. This is the core unit of analysis.
+    
+    Returns a result dict or None if no confident match.
+    """
+    # ===== LAYER 1: Try curated keyword match (relaxed for local context) =====
+    curated_result = _try_curated_match(context, word, local_context=True)
+    if curated_result:
+        return curated_result
+    
+    # ===== LAYER 2: SBERT + WordNet AI Fallback =====
+    result = detect_homonym_meaning_wic(context, word)
+    if result:
+        score = result.get("score", 0)
+        gap = result.get("score_gap", 0)
+        
+        th = CURATED_THRESHOLD if is_curated else GENERAL_THRESHOLD
+        gp = CURATED_GAP if is_curated else GENERAL_GAP
+        
+        if score >= th and gap >= gp:
+            result = _assign_confidence_label(result, is_curated)
+            return result
+    
+    # ===== LAYER 3: Silently skip low confidence =====
+    return None
+
+
+def _deduplicate_by_meaning(results: list) -> list:
+    """
+    Smart deduplication for multi-occurrence results of the SAME word.
+    Selects the best-confidence result per unique meaning.
+    Demo-safety: if all occurrences resolved to the same meaning,
+    return all original results instead of collapsing.
+    """
+    if len(results) <= 1:
+        return results
+
+    # Confidence ranking for comparison
+    conf_rank = {'high': 3, 'medium': 2, 'low': 1}
+
+    # Build best result per unique meaning
+    seen_meanings = {}
+    for r in results:
+        meaning = r.get('meaning', '')
+        rank = conf_rank.get(r.get('confidence', 'low'), 0)
+
+        if meaning not in seen_meanings or rank > conf_rank.get(seen_meanings[meaning].get('confidence', 'low'), 0):
+            seen_meanings[meaning] = r
+
+    # Demo-safety: do NOT collapse when all occurrences share the same meaning
+    if len(results) > 1 and len(seen_meanings) == 1:
+        return results
+
+    return list(seen_meanings.values())
+
+
 def analyze_homonyms_sbert_pipeline(text: str) -> dict:
     """
     Entry point for high-precision homonym detection.
@@ -390,6 +498,11 @@ def analyze_homonyms_sbert_pipeline(text: str) -> dict:
       Layer 1: Curated JSON keyword-scoring (fast, no ML needed)
       Layer 2: SBERT + WordNet AI fallback (existing pipeline, unchanged)
       Layer 3: Safe low-confidence handling (explicit response instead of silence)
+    
+    MULTI-OCCURRENCE EXTENSION:
+      When a word appears more than once, each occurrence is analyzed
+      independently using a local context window (±5 tokens). Results
+      with identical meanings are deduplicated, keeping the best confidence.
     
     Uses spaCy for POS filtering, falling back to NLTK if needed.
     """
@@ -424,9 +537,84 @@ def analyze_homonyms_sbert_pipeline(text: str) -> dict:
                 "word": word.lower()
             })
     
+    # ====================================================================
+    # STEP 1: Build word occurrence map (token index -> word)
+    # ====================================================================
+    word_positions = {}  # word -> list of token indices
+    for idx, item in enumerate(tokens_to_process):
+        w = item["word"]
+        if w not in word_positions:
+            word_positions[w] = []
+        word_positions[w].append(idx)
+    
+    # ====================================================================
+    # STEP 2: Identify which words are multi-occurrence candidates
+    # ====================================================================
+    multi_occ_words = set()
+    for w, positions in word_positions.items():
+        if len(positions) > 1 and w not in STOPWORDS and w not in VERB_BLACKLIST and len(w) >= 3:
+            multi_occ_words.add(w)
+    
     results = []
-    seen_words = set()
+    seen_words = set()  # For single-occurrence dedup (preserves old behavior)
 
+    # ====================================================================
+    # STEP 3: Process multi-occurrence words FIRST (per-occurrence pipeline)
+    # ====================================================================
+    for word in multi_occ_words:
+        positions = word_positions[word]
+        is_curated = _get_merged_curated_entry(word) is not None
+        
+        # POS check: at least one occurrence must pass POS filter
+        any_valid_pos = False
+        for pos_idx in positions:
+            pos = tokens_to_process[pos_idx]["pos"]
+            if pos in ("NOUN", "PROPN", "ADJ", "VERB") or is_curated:
+                any_valid_pos = True
+                break
+        
+        if not any_valid_pos:
+            continue
+        
+        # Check for lexical ambiguity
+        synsets = wn.synsets(word)
+        if not is_curated and len(synsets) <= 1:
+            continue
+        
+        # Run pipeline per occurrence with local context
+        occurrence_results = []
+        for occ_num, pos_idx in enumerate(positions):
+            pos = tokens_to_process[pos_idx]["pos"]
+            
+            # Each occurrence must independently pass POS filter
+            if pos not in ("NOUN", "PROPN", "ADJ", "VERB") and not is_curated:
+                continue
+            
+            # Extract local context window
+            context = _extract_context_window(tokens_to_process, pos_idx)
+            
+            # Skip if context is too weak
+            if not _context_has_enough_content(context, word):
+                continue
+            
+            result = _run_single_occurrence_pipeline(context, word, is_curated)
+            if result:
+                # Add occurrence metadata
+                result["context"] = context
+                result["position"] = occ_num + 1  # 1-indexed occurrence number
+                occurrence_results.append(result)
+        
+        # Deduplicate: only keep entries with DIFFERENT meanings
+        if occurrence_results:
+            deduped = _deduplicate_by_meaning(occurrence_results)
+            results.extend(deduped)
+        
+        # Mark word as handled so single-occurrence loop skips it
+        seen_words.add(word)
+
+    # ====================================================================
+    # STEP 4: Process single-occurrence words (original logic, unchanged)
+    # ====================================================================
     for item in tokens_to_process:
         word = item["word"]
         pos = item["pos"]
