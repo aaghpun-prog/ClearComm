@@ -1,760 +1,848 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ClearComm — AI Text Clarity Suite</title>
-    <meta name="description"
-        content="ClearComm: AI-powered text clarity analysis with homonym detection, length control, and information gap detection.">
+    <title>ClearComm | AI Clarity Engine</title>
+    <meta name="description" content="ClearComm: AI-powered text clarity analysis with advanced AI semantic analysis.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        /* ============================================================
-           DESIGN TOKENS
-           ============================================================ */
         :root {
-            --bg: #0B0F19;
-            --surface: #111827;
-            --surface-2: #1a2233;
-            --border: #1F2937;
-            --border-hover: #374151;
-            --text: #E5E7EB;
-            --text-dim: #9CA3AF;
-            --text-faint: #6B7280;
-            --accent: #7C3AED;
-            --accent-dim: rgba(124, 58, 237, 0.15);
-            --accent-hover: #6D28D9;
-            --secondary: #38BDF8;
-            --secondary-dim: rgba(56, 189, 248, 0.12);
-            --success: #34D399;
-            --success-dim: rgba(52, 211, 153, 0.12);
-            --warn: #FBBF24;
-            --warn-dim: rgba(251, 191, 36, 0.12);
-            --error: #F87171;
-            --error-dim: rgba(248, 113, 113, 0.12);
-            --radius: 10px;
-            --radius-lg: 14px;
-            --transition: 180ms ease;
+            --bg-color: #030712;
+            --surface-color: rgba(17, 24, 39, 0.45);
+            --surface-border: rgba(255, 255, 255, 0.08);
+            --surface-hover: rgba(31, 41, 55, 0.55);
+            --primary: #8b5cf6;
+            --primary-glow: rgba(139, 92, 246, 0.5);
+            --secondary: #06b6d4;
+            --secondary-glow: rgba(6, 182, 212, 0.5);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --success: #10b981;
+            --warn: #f59e0b;
+            --error: #ef4444;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        /* ============================================================
-           RESET & BASE
-           ============================================================ */
-        *,
-        *::before,
-        *::after {
+        * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
         }
 
         body {
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
-            background: var(--bg);
-            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
             min-height: 100vh;
-            -webkit-font-smoothing: antialiased;
-        }
-
-        /* ============================================================
-           LAYOUT SHELL
-           ============================================================ */
-        .app-shell {
+            overflow-x: hidden;
             display: flex;
             flex-direction: column;
-            min-height: 100vh;
         }
 
-        /* TOP BAR */
-        .topbar {
+        /* Animated Mesh Gradient Background */
+        .mesh-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1;
+            overflow: hidden;
+            background: #030712;
+        }
+
+        .blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(100px);
+            opacity: 0.6;
+            animation: float 20s infinite alternate cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .blob-1 {
+            top: -10%;
+            left: -10%;
+            width: 50vw;
+            height: 50vw;
+            background: radial-gradient(circle, rgba(139,92,246,0.4) 0%, rgba(139,92,246,0) 70%);
+            animation-delay: 0s;
+        }
+
+        .blob-2 {
+            bottom: -20%;
+            right: -10%;
+            width: 60vw;
+            height: 60vw;
+            background: radial-gradient(circle, rgba(6,182,212,0.3) 0%, rgba(6,182,212,0) 70%);
+            animation-delay: -5s;
+        }
+
+        .blob-3 {
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40vw;
+            height: 40vw;
+            background: radial-gradient(circle, rgba(236,72,153,0.2) 0%, rgba(236,72,153,0) 70%);
+            animation-delay: -10s;
+        }
+
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(30px, -50px) scale(1.1); }
+            66% { transform: translate(-20px, 20px) scale(0.9); }
+            100% { transform: translate(0, 0) scale(1); }
+        }
+
+        /* Header */
+        header {
             display: flex;
-            align-items: center;
             justify-content: space-between;
-            padding: 0 48px;
-            height: 56px;
-            border-bottom: 1px solid var(--border);
-            background: var(--surface);
-            flex-shrink: 0;
+            align-items: center;
+            padding: 24px 48px;
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--surface-border);
+            background: rgba(3, 7, 18, 0.3);
+            z-index: 10;
         }
 
-        .topbar-brand {
+        .brand {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 20px;
             font-weight: 700;
-            font-size: 15px;
             letter-spacing: -0.02em;
-            color: var(--text);
         }
 
-        .topbar-brand .logo-mark {
-            width: 26px;
-            height: 26px;
-            border-radius: 7px;
-            background: linear-gradient(135deg, var(--accent), var(--secondary));
+        .brand-logo {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
             display: flex;
-            align-items: center;
             justify-content: center;
-            font-size: 13px;
-            font-weight: 700;
-            color: #fff;
+            align-items: center;
+            color: white;
+            font-size: 18px;
+            box-shadow: 0 0 20px var(--primary-glow);
         }
 
-        .topbar-meta {
-            font-size: 12px;
-            color: var(--text-faint);
+        .status {
             display: flex;
             align-items: center;
             gap: 16px;
+            font-size: 13px;
+            color: var(--text-muted);
+            font-weight: 500;
         }
 
-        .topbar-meta .dot {
-            width: 6px;
-            height: 6px;
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--success);
             border-radius: 50%;
-            background: var(--success);
-            display: inline-block;
+            box-shadow: 0 0 10px var(--success);
+            animation: pulse 2s infinite;
         }
 
-        /* MAIN CONTENT */
-        .main {
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+            70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        /* Main Workspace */
+        main {
             flex: 1;
-            padding: 40px 48px 60px;
-            max-width: 1120px;
-            width: 100%;
+            padding: 40px 48px;
+            max-width: 1600px;
             margin: 0 auto;
-        }
-
-        /* PAGE HEADER */
-        .page-header {
-            margin-bottom: 32px;
-        }
-
-        .page-header h1 {
-            font-size: 28px;
-            font-weight: 700;
-            letter-spacing: -0.03em;
-            color: #fff;
-            margin-bottom: 6px;
-        }
-
-        .page-header p {
-            font-size: 14px;
-            color: var(--text-dim);
-            line-height: 1.5;
-        }
-
-        /* ============================================================
-           TABS
-           ============================================================ */
-        .tab-bar {
+            width: 100%;
             display: flex;
-            gap: 4px;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 4px;
-            margin-bottom: 28px;
-            width: fit-content;
+            flex-direction: column;
+            gap: 32px;
+            z-index: 1;
+        }
+
+        .header-content h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 42px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(to right, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.03em;
+        }
+
+        .header-content p {
+            color: var(--text-muted);
+            font-size: 16px;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: inline-flex;
+            background: var(--surface-color);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--surface-border);
+            padding: 6px;
+            border-radius: 12px;
+            gap: 8px;
         }
 
         .tab-btn {
             background: transparent;
             border: none;
-            padding: 9px 20px;
-            font-family: inherit;
-            font-size: 13px;
+            color: var(--text-muted);
+            padding: 10px 24px;
+            font-family: 'Inter', sans-serif;
             font-weight: 500;
-            color: var(--text-dim);
+            font-size: 14px;
+            border-radius: 8px;
             cursor: pointer;
-            border-radius: 7px;
-            transition: all var(--transition);
-            white-space: nowrap;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
         }
 
         .tab-btn:hover {
-            color: var(--text);
-            background: rgba(255, 255, 255, 0.04);
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.05);
         }
 
         .tab-btn.active {
-            background: var(--accent);
-            color: #fff;
-            box-shadow: 0 1px 4px rgba(124, 58, 237, 0.3);
+            color: white;
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
         }
 
-        /* TAB PANELS */
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 40%;
+            height: 2px;
+            background: var(--primary);
+            border-radius: 2px 2px 0 0;
+            box-shadow: 0 -2px 10px var(--primary-glow);
+        }
+
+        /* Split Screen Panels */
         .tab-panel {
             display: none;
-            animation: panelIn 250ms ease;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: var(--transition);
         }
 
         .tab-panel.active {
-            display: block;
+            display: flex;
+            gap: 32px;
+            opacity: 1;
+            transform: translateY(0);
+            animation: fadeInTab 0.4s ease forwards;
         }
 
-        @keyframes panelIn {
-            from {
-                opacity: 0;
-                transform: translateY(6px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+        @keyframes fadeInTab {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
-        /* ============================================================
-           PANEL CARD
-           ============================================================ */
-        .panel-card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-lg);
+        .pane {
+            flex: 1;
+            background: var(--surface-color);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid var(--surface-border);
+            border-radius: 20px;
             padding: 32px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
 
-        .panel-title {
-            font-size: 16px;
+        .pane:hover {
+            border-color: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.6), 0 0 30px rgba(139, 92, 246, 0.05);
+        }
+
+        .pane-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 20px;
             font-weight: 600;
-            color: #fff;
-            margin-bottom: 4px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
-        .panel-desc {
-            font-size: 13px;
-            color: var(--text-faint);
-            margin-bottom: 24px;
-            line-height: 1.5;
+        .pane-title svg {
+            color: var(--primary);
+            width: 20px;
+            height: 20px;
         }
 
-        /* ============================================================
-           FORM ELEMENTS
-           ============================================================ */
-        textarea {
-            width: 100%;
-            height: 160px;
-            padding: 14px 16px;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            font-family: inherit;
+        .pane-desc {
             font-size: 14px;
-            color: var(--text);
-            resize: vertical;
-            transition: border-color var(--transition);
+            color: var(--text-muted);
+            margin-bottom: 24px;
             line-height: 1.6;
         }
 
-        textarea::placeholder {
-            color: var(--text-faint);
+        /* Forms & Inputs */
+        textarea {
+            width: 100%;
+            flex: 1;
+            min-height: 200px;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--surface-border);
+            border-radius: 12px;
+            padding: 20px;
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            font-size: 15px;
+            line-height: 1.6;
+            resize: none;
+            transition: var(--transition);
         }
 
         textarea:focus {
             outline: none;
-            border-color: var(--accent);
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15);
+            background: rgba(0, 0, 0, 0.3);
         }
 
-        .field-row {
+        textarea::placeholder {
+            color: rgba(148, 163, 184, 0.5);
+        }
+
+        .controls {
             display: flex;
             align-items: flex-end;
             gap: 16px;
-            margin-top: 20px;
+            margin-top: 24px;
         }
 
-        .field-group {
+        .input-group {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 8px;
         }
 
-        .field-group label {
+        .input-group label {
             font-size: 12px;
-            font-weight: 500;
-            color: var(--text-dim);
             text-transform: uppercase;
             letter-spacing: 0.05em;
+            color: var(--text-muted);
+            font-weight: 600;
         }
 
-        .field-group input[type="number"] {
-            width: 100px;
-            padding: 10px 12px;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            font-family: inherit;
-            font-size: 14px;
-            color: var(--text);
-            transition: border-color var(--transition);
+        input[type="number"] {
+            width: 120px;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--surface-border);
+            border-radius: 8px;
+            padding: 12px 16px;
+            color: white;
+            font-family: 'Inter', sans-serif;
+            transition: var(--transition);
         }
 
-        .field-group input:focus {
+        input[type="number"]:focus {
             outline: none;
-            border-color: var(--accent);
+            border-color: var(--secondary);
+            box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.15);
         }
 
-        /* PRIMARY BUTTON */
-        .btn-primary {
-            display: inline-flex;
+        /* Buttons */
+        .btn {
+            background: linear-gradient(135deg, var(--primary), #6d28d9);
+            color: white;
+            border: none;
+            padding: 12px 28px;
+            border-radius: 8px;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
             align-items: center;
             gap: 8px;
-            padding: 10px 22px;
-            background: var(--accent);
-            color: #fff;
-            border: none;
-            border-radius: var(--radius);
-            font-family: inherit;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all var(--transition);
-            letter-spacing: -0.01em;
+            transition: var(--transition);
+            box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+            position: relative;
+            overflow: hidden;
         }
 
-        .btn-primary:hover {
-            background: var(--accent-hover);
-            transform: translateY(-1px);
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%; width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s ease;
         }
 
-        .btn-primary:active {
-            transform: translateY(0) scale(0.98);
+        .btn:hover::before {
+            left: 100%;
         }
 
-        .btn-primary:disabled {
-            opacity: 0.5;
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(139, 92, 246, 0.5);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
             cursor: not-allowed;
             transform: none;
+            box-shadow: none;
         }
 
-        .btn-primary svg {
-            width: 15px;
-            height: 15px;
+        /* Results Pane */
+        .result-empty {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: var(--text-muted);
+            text-align: center;
+            gap: 16px;
+            transition: opacity 0.3s ease;
         }
 
-        /* LOADER */
-        .loader-bar {
+        .result-empty svg {
+            width: 48px;
+            height: 48px;
+            opacity: 0.5;
+            color: var(--text-muted);
+        }
+
+        .loader {
             display: none;
             align-items: center;
-            gap: 10px;
-            margin-top: 20px;
-            font-size: 13px;
-            color: var(--text-dim);
-        }
-
-        .loader-bar.visible {
-            display: flex;
-        }
-
-        .loader-spinner {
-            width: 16px;
-            height: 16px;
-            border: 2px solid var(--border);
-            border-top-color: var(--accent);
-            border-radius: 50%;
-            animation: spin 0.7s linear infinite;
-        }
-
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-        /* ============================================================
-           RESULT AREA
-           ============================================================ */
-        .result-area {
-            margin-top: 28px;
-            display: none;
-        }
-
-        .result-area.visible {
-            display: block;
-            animation: panelIn 250ms ease;
-        }
-
-        .result-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 16px;
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-dim);
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-        }
-
-        .result-header::before {
-            content: '';
-            display: block;
-            width: 3px;
-            height: 14px;
-            border-radius: 2px;
-            background: var(--accent);
-        }
-
-        /* LENGTH CONTROL RESULT */
-        .length-result {
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 24px;
-        }
-
-        .length-stats {
-            display: flex;
             gap: 12px;
-            margin-bottom: 18px;
+            color: var(--secondary);
+            font-weight: 500;
+            font-size: 14px;
+            margin-top: 24px;
         }
 
-        .stat-chip {
+        .loader.visible {
+            display: flex;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(6, 182, 212, 0.2);
+            border-top-color: var(--secondary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .result-content {
+            display: none;
+            flex-direction: column;
+            gap: 20px;
+            animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .result-content.visible {
+            display: flex;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Length Control Result Styles */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .stat-box {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--surface-border);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+            transition: var(--transition);
+        }
+        
+        .stat-box:hover {
+            border-color: rgba(255,255,255,0.1);
+            background: rgba(0,0,0,0.3);
+        }
+
+        .stat-value {
+            font-family: 'Outfit', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        .stat-box.original .stat-value { color: var(--text-muted); }
+        .stat-box.target .stat-value { color: var(--warn); }
+        .stat-box.output .stat-value { color: var(--success); }
+        .stat-box.dev .stat-value { color: var(--secondary); }
+
+        .rewrite-box {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--surface-border);
+            border-radius: 12px;
+            padding: 24px;
+            font-size: 16px;
+            line-height: 1.8;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .rewrite-box::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 4px; height: 100%;
+            background: var(--primary);
+        }
+
+        /* Homonym Result Styles */
+        .homonym-item {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--surface-border);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: var(--transition);
+            animation: fadeInCard 0.4s ease backwards;
+        }
+        
+        .homonym-item:hover {
+            transform: translateX(5px);
+            border-color: var(--surface-hover);
+            background: rgba(0, 0, 0, 0.4);
+        }
+
+        @keyframes fadeInCard {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .h-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .h-word {
+            font-family: 'Outfit', sans-serif;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            padding: 5px 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 600;
         }
 
-        .stat-chip.original {
-            background: var(--secondary-dim);
-            color: var(--secondary);
-        }
-
-        .stat-chip.target {
-            background: var(--warn-dim);
-            color: var(--warn);
-        }
-
-        .stat-chip.final {
-            background: var(--success-dim);
-            color: var(--success);
-        }
-
-        .stat-chip.dev {
-            background: var(--accent-dim);
-            color: #a78bfa;
-        }
-
-        .rewrite-text {
-            font-size: 15px;
-            line-height: 1.7;
-            color: var(--text);
-            padding: 16px;
-            background: var(--bg);
-            border-radius: var(--radius);
-            border: 1px solid var(--border);
-        }
-
-        /* HOMONYM CARDS */
-        .homonym-card {
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 18px 20px;
-            margin-bottom: 10px;
-            transition: border-color var(--transition);
-        }
-
-        .homonym-card:hover {
-            border-color: var(--border-hover);
-        }
-
-        .homonym-card-top {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 10px;
-        }
-
-        .homonym-word {
-            font-size: 15px;
-            font-weight: 600;
-            color: #fff;
-        }
-
-        .homonym-word span {
-            color: var(--accent);
-        }
-
-        /* CONFIDENCE BADGE */
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            padding: 3px 10px;
-            border-radius: 5px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.03em;
-        }
-
-        .badge-high {
-            background: var(--success-dim);
-            color: var(--success);
-        }
-
-        .badge-medium {
-            background: var(--warn-dim);
-            color: var(--warn);
-        }
-
-        .badge-low {
-            background: var(--error-dim);
-            color: var(--error);
-        }
-
-        .badge-dot {
-            width: 5px;
-            height: 5px;
+        .badge::before {
+            content: '';
+            width: 6px; height: 6px;
             border-radius: 50%;
             background: currentColor;
         }
 
-        .homonym-meaning {
-            font-size: 13px;
-            color: var(--text-dim);
+        .badge.high { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+        .badge.medium { background: rgba(245, 158, 11, 0.1); color: var(--warn); }
+        .badge.low { background: rgba(239, 68, 68, 0.1); color: var(--error); }
+
+        .h-meaning {
+            font-size: 14px;
+            color: var(--text-main);
             line-height: 1.5;
         }
 
-        .homonym-meaning strong {
-            color: var(--success);
-            font-weight: 600;
-        }
+        .h-meaning strong { color: var(--secondary); font-weight: 600; }
 
-        /* INFO GAP CARDS */
-        .gap-card {
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-            border-left: 3px solid var(--warn);
-            border-radius: var(--radius);
-            padding: 16px 20px;
-            margin-bottom: 10px;
-        }
-
-        .gap-label {
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            color: var(--warn);
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .gap-sentence {
-            font-size: 13px;
-            color: var(--text-dim);
-            font-style: italic;
-            padding: 10px 14px;
-            background: var(--bg);
-            border-radius: 6px;
-            border: 1px solid var(--border);
-            line-height: 1.5;
-        }
-
-        /* EMPTY / SUCCESS STATE */
-        .empty-state {
+        /* Info Gap Result Styles */
+        .gap-item {
+            background: rgba(245, 158, 11, 0.05);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+            border-radius: 12px;
             padding: 20px;
-            border-radius: var(--radius);
-            font-size: 13px;
-            font-weight: 500;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: var(--transition);
+        }
+        
+        .gap-item:hover {
+            background: rgba(245, 158, 11, 0.08);
+            border-color: rgba(245, 158, 11, 0.4);
+            transform: translateX(5px);
+        }
+
+        .g-missing {
+            font-family: 'Outfit', sans-serif;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--warn);
             display: flex;
             align-items: center;
             gap: 8px;
         }
 
-        .empty-state.ok {
-            background: var(--success-dim);
-            color: var(--success);
-        }
-
-        .empty-state.err {
-            background: var(--error-dim);
-            color: var(--error);
-        }
-
-        /* STATUS MESSAGE */
-        .status-msg {
-            margin-top: 10px;
-            font-size: 12px;
-            color: var(--text-faint);
+        .g-sentence {
+            font-size: 14px;
+            color: var(--text-muted);
             font-style: italic;
+            padding-left: 24px;
+            border-left: 2px solid rgba(245, 158, 11, 0.3);
+            line-height: 1.5;
         }
 
-        /* FOOTER */
-        .app-footer {
-            text-align: center;
-            padding: 24px;
-            font-size: 12px;
-            color: var(--text-faint);
-            border-top: 1px solid var(--border);
+        /* Message / Alert */
+        .alert {
+            padding: 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .alert.error {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+        .alert.success {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .tab-panel.active { flex-direction: column; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            main { padding: 20px; }
+            header { padding: 16px 20px; }
         }
     </style>
 </head>
 
 <body>
-    <div class="app-shell">
-        <!-- TOP BAR -->
-        <header class="topbar">
-            <div class="topbar-brand">
-                <div class="logo-mark">C</div>
-                ClearComm
-            </div>
-            <div class="topbar-meta">
-                <span><span class="dot"></span> System Ready</span>
-                <span>v2.0</span>
-            </div>
-        </header>
-
-        <!-- MAIN CONTENT -->
-        <main class="main">
-            <div class="page-header">
-                <h1>Text Clarity Analysis</h1>
-                <p>AI-powered tools for rewriting, homonym detection, and information gap analysis.</p>
-            </div>
-
-            <!-- TABS -->
-            <div class="tab-bar" role="tablist">
-                <button class="tab-btn active" role="tab" onclick="switchTab('tab-length', this)"
-                    id="tab-btn-length">Length Control</button>
-                <button class="tab-btn" role="tab" onclick="switchTab('tab-homonym', this)" id="tab-btn-homonym">Homonym
-                    Detector</button>
-                <button class="tab-btn" role="tab" onclick="switchTab('tab-infogap', this)" id="tab-btn-infogap">Info
-                    Gap Detector</button>
-            </div>
-
-            <!-- ==================== TAB 1: LENGTH CONTROL ==================== -->
-            <div id="tab-length" class="tab-panel active">
-                <div class="panel-card">
-                    <div class="panel-title">Adaptive Length Control</div>
-                    <div class="panel-desc">Gemini AI rewriting engine with retry validation, post-processing, and
-                        deterministic fallback pipelines to compress, expand, or refine text to a target word count.
-                    </div>
-
-                    <textarea id="len-text"
-                        placeholder="Paste a paragraph to rewrite to your target word count..."></textarea>
-
-                    <div class="field-row">
-                        <div class="field-group">
-                            <label for="len-target">Target Words</label>
-                            <input type="number" id="len-target" value="25" min="3">
-                        </div>
-                        <button class="btn-primary" id="len-btn" onclick="runAnalysis('length_control','len')">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M12 20h9" />
-                                <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
-                            </svg>
-                            Rewrite
-                        </button>
-                    </div>
-
-                    <div class="loader-bar" id="len-loader">
-                        <div class="loader-spinner"></div>
-                        Running Gemini AI rewrite...
-                    </div>
-
-                    <div class="result-area" id="len-out">
-                        <div class="result-header">Output</div>
-                        <div id="len-json"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ==================== TAB 2: HOMONYM DETECTOR ==================== -->
-            <div id="tab-homonym" class="tab-panel">
-                <div class="panel-card">
-                    <div class="panel-title"> 3-Layer Contextual Homonym Detection</div>
-                    <div class="panel-desc">Curated knowledge-base matching, SBERT semantic similarity, and WordNet/WiC
-                        fallback for contextual word-sense disambiguation with confidence scoring.</div>
-
-                    <textarea id="hom-text"
-                        placeholder='Try: "I sat on the river bank waiting for a fish" or "She went to the bank to deposit cash"'></textarea>
-
-                    <div class="field-row">
-                        <button class="btn-primary" id="hom-btn" onclick="runAnalysis('homonym_detector','hom')">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="11" cy="11" r="8" />
-                                <path d="M21 21l-4.35-4.35" />
-                            </svg>
-                            Analyze Context
-                        </button>
-                    </div>
-
-                    <div class="loader-bar" id="hom-loader">
-                        <div class="loader-spinner"></div>
-                        Running 3-layer semantic analysis...
-                    </div>
-
-                    <div class="result-area" id="hom-out">
-                        <div class="result-header">Analysis Results</div>
-                        <div id="hom-json"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ==================== TAB 3: INFO GAP ==================== -->
-            <div id="tab-infogap" class="tab-panel">
-                <div class="panel-card">
-                    <div class="panel-title">5-Layer Information Gap Detection</div>
-                    <div class="panel-desc">Intent classification, spaCy NER, regex extraction, rule-based field
-                        validation, and multi-sentence analysis to detect missing context.</div>
-
-                    <textarea id="gap-text"
-                        placeholder='Try: "Submit the final report to management" or "Update the server configuration"'></textarea>
-
-                    <div class="field-row">
-                        <button class="btn-primary" id="gap-btn" onclick="runAnalysis('info_gap','gap')">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                stroke-linecap="round" stroke-linejoin="round">
-                                <path
-                                    d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                                <line x1="12" y1="9" x2="12" y2="13" />
-                                <line x1="12" y1="17" x2="12.01" y2="17" />
-                            </svg>
-                            Scan for Gaps
-                        </button>
-                    </div>
-
-                    <div class="loader-bar" id="gap-loader">
-                        <div class="loader-spinner"></div>
-                        Classifying text semantics...
-                    </div>
-
-                    <div class="result-area" id="gap-out">
-                        <div class="result-header">Detected Gaps</div>
-                        <div id="gap-json"></div>
-                    </div>
-                </div>
-            </div>
-        </main>
-
-        <footer class="app-footer">ClearComm &mdash; AI Text Clarity Suite &middot; College Demo v2.0</footer>
+    <!-- Animated Background -->
+    <div class="mesh-bg">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
     </div>
+
+    <!-- Header -->
+    <header>
+        <div class="brand">
+            <div class="brand-logo">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+            </div>
+            ClearComm
+        </div>
+        <div class="status">
+            <div class="status-dot"></div>
+            System Active
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main>
+        <div class="header-content">
+            <h1>AI Clarity Engine</h1>
+            <p>Next-generation semantic analysis and intelligent text refinement.</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('tab-length', this)" id="tab-btn-length">Length Control</button>
+            <button class="tab-btn" onclick="switchTab('tab-homonym', this)" id="tab-btn-homonym">Homonym Detector</button>
+            <button class="tab-btn" onclick="switchTab('tab-infogap', this)" id="tab-btn-infogap">Info Gap Scanner</button>
+        </div>
+
+        <!-- Length Control Panel -->
+        <div id="tab-length" class="tab-panel active">
+            <div class="pane">
+                <div class="pane-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
+                    Adaptive Length Control
+                </div>
+                <div class="pane-desc">Gemini AI rewriting engine with deterministic fallback pipelines to compress or expand text to a strict target word count.</div>
+                
+                <textarea id="len-text" placeholder="Enter text to automatically refine..."></textarea>
+                
+                <div class="controls">
+                    <div class="input-group">
+                        <label>Target Words</label>
+                        <input type="number" id="len-target" value="25" min="3">
+                    </div>
+                    <button class="btn" id="len-btn" onclick="runAnalysis('length_control', 'len')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        Execute Rewrite
+                    </button>
+                </div>
+            </div>
+            
+            <div class="pane">
+                <div class="pane-title">Live Results</div>
+                <div class="result-empty" id="len-empty">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+                    <p>Awaiting input for length control analysis.</p>
+                </div>
+                
+                <div class="loader" id="len-loader">
+                    <div class="spinner"></div>
+                    Synthesizing response...
+                </div>
+                
+                <div class="result-content" id="len-out">
+                    <div id="len-json"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Homonym Detector Panel -->
+        <div id="tab-homonym" class="tab-panel">
+            <div class="pane">
+                <div class="pane-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    Contextual Ambiguity Scanner
+                </div>
+                <div class="pane-desc">3-layer semantic disambiguation pipeline utilizing SBERT and curated knowledge bases to detect multi-sense terminology.</div>
+                
+                <textarea id="hom-text" placeholder="e.g. The bank approved the loan while I sat on the river bank..."></textarea>
+                
+                <div class="controls">
+                    <button class="btn" id="hom-btn" onclick="runAnalysis('homonym_detector', 'hom')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l3-9 5 18 3-9h5"></path></svg>
+                        Analyze Semantics
+                    </button>
+                </div>
+            </div>
+            
+            <div class="pane">
+                <div class="pane-title">Disambiguation Results</div>
+                <div class="result-empty" id="hom-empty">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                    <p>Awaiting text for contextual analysis.</p>
+                </div>
+                
+                <div class="loader" id="hom-loader">
+                    <div class="spinner"></div>
+                    Evaluating vector embeddings...
+                </div>
+                
+                <div class="result-content" id="hom-out">
+                    <div id="hom-json"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Gap Panel -->
+        <div id="tab-infogap" class="tab-panel">
+            <div class="pane">
+                <div class="pane-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    Intent & Gap Detection
+                </div>
+                <div class="pane-desc">5-layer NLP pipeline leveraging spaCy NER and intent classification to identify missing critical parameters in business communications.</div>
+                
+                <textarea id="gap-text" placeholder="e.g. Schedule the quarterly review meeting for next week..."></textarea>
+                
+                <div class="controls">
+                    <button class="btn" id="gap-btn" onclick="runAnalysis('info_gap', 'gap')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                        Scan Parameters
+                    </button>
+                </div>
+            </div>
+            
+            <div class="pane">
+                <div class="pane-title">Detected Omissions</div>
+                <div class="result-empty" id="gap-empty">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><path d="M9 3v18"></path></svg>
+                    <p>Awaiting input for structural validation.</p>
+                </div>
+                
+                <div class="loader" id="gap-loader">
+                    <div class="spinner"></div>
+                    Classifying linguistic intent...
+                </div>
+                
+                <div class="result-content" id="gap-out">
+                    <div id="gap-json"></div>
+                </div>
+            </div>
+        </div>
+    </main>
 
     <script>
         function switchTab(tabId, btn) {
-            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            // Hide all panels
+            document.querySelectorAll('.tab-panel').forEach(p => {
+                p.classList.remove('active');
+            });
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            
+            // Show new panel
             document.getElementById(tabId).classList.add('active');
             btn.classList.add('active');
         }
 
-        function badgeClass(confidence) {
-            if (!confidence) return 'badge-low';
+        function getBadgeClass(confidence) {
+            if (!confidence) return 'low';
             const c = String(confidence).toLowerCase();
-            if (c === 'high' || c === 'very high') return 'badge-high';
-            if (c === 'medium') return 'badge-medium';
-            return 'badge-low';
+            if (c.includes('high')) return 'high';
+            if (c.includes('medium')) return 'medium';
+            return 'low';
         }
 
         function escapeHtml(str) {
@@ -769,6 +857,7 @@
             const loaderEl = document.getElementById(`${prefix}-loader`);
             const outEl = document.getElementById(`${prefix}-out`);
             const jsonEl = document.getElementById(`${prefix}-json`);
+            const emptyEl = document.getElementById(`${prefix}-empty`);
 
             const text = textEl.value;
             if (!text.trim()) { textEl.focus(); return; }
@@ -778,9 +867,11 @@
                 body.target = parseInt(document.getElementById('len-target').value) || 25;
             }
 
+            // UI Loading State
             btnEl.disabled = true;
-            loaderEl.classList.add('visible');
+            emptyEl.style.display = 'none';
             outEl.classList.remove('visible');
+            loaderEl.classList.add('visible');
             jsonEl.innerHTML = '';
 
             try {
@@ -792,7 +883,7 @@
                 const data = await res.json();
 
                 if (data.error) {
-                    jsonEl.innerHTML = `<div class="empty-state err">${escapeHtml(data.error)}</div>`;
+                    jsonEl.innerHTML = `<div class="alert error"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> ${escapeHtml(data.error)}</div>`;
                     outEl.classList.add('visible');
                     return;
                 }
@@ -802,48 +893,58 @@
                 if (endpoint === 'length_control') {
                     const dev = data.deviation !== undefined ? data.deviation : (data.final_word_count - (body.target || 0));
                     html = `
-                        <div class="length-result">
-                            <div class="length-stats">
-                                <span class="stat-chip original">Original: ${data.original_word_count} words</span>
-                                <span class="stat-chip target">Target: ${data.target_word_count} words</span>
-                                <span class="stat-chip final">Output: ${data.final_word_count} words</span>
-                                <span class="stat-chip dev">Deviation: ${dev >= 0 ? '+' : ''}${dev}</span>
+                        <div class="stats-grid">
+                            <div class="stat-box original">
+                                <div class="stat-value">${data.original_word_count}</div>
+                                <div class="stat-label">Original</div>
                             </div>
-                            <div class="rewrite-text">${escapeHtml(data.rewritten_text)}</div>
-                            ${data.message ? `<div class="status-msg">${escapeHtml(data.message)}</div>` : ''}
-                        </div>`;
-
+                            <div class="stat-box target">
+                                <div class="stat-value">${data.target_word_count}</div>
+                                <div class="stat-label">Target</div>
+                            </div>
+                            <div class="stat-box output">
+                                <div class="stat-value">${data.final_word_count}</div>
+                                <div class="stat-label">Final Length</div>
+                            </div>
+                            <div class="stat-box dev">
+                                <div class="stat-value">${dev >= 0 ? '+' : ''}${dev}</div>
+                                <div class="stat-label">Deviation</div>
+                            </div>
+                        </div>
+                        <div class="rewrite-box">${escapeHtml(data.rewritten_text)}</div>
+                    `;
                 } else if (endpoint === 'homonym_detector') {
                     if (data.homonyms && data.homonyms.length > 0) {
-                        data.homonyms.forEach(h => {
-                            const bc = badgeClass(h.confidence);
+                        data.homonyms.forEach((h, index) => {
+                            const bc = getBadgeClass(h.confidence);
                             html += `
-                                <div class="homonym-card">
-                                    <div class="homonym-card-top">
-                                        <div class="homonym-word"><span>${escapeHtml(h.word)}</span></div>
-                                        <span class="badge ${bc}"><span class="badge-dot"></span>${escapeHtml(String(h.confidence))}</span>
+                                <div class="homonym-item" style="animation-delay: ${index * 0.1}s">
+                                    <div class="h-header">
+                                        <div class="h-word">${escapeHtml(h.word)}</div>
+                                        <div class="badge ${bc}">${escapeHtml(String(h.confidence))}</div>
                                     </div>
-                                    <div class="homonym-meaning">Detected meaning: <strong>${escapeHtml(h.meaning)}</strong></div>
-                                </div>`;
+                                    <div class="h-meaning">Detected Context: <strong>${escapeHtml(h.meaning)}</strong></div>
+                                </div>
+                            `;
                         });
                     } else {
-                        html = `<div class="empty-state ok">No ambiguous homonyms detected in the text.</div>`;
+                        html = `<div class="alert success"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> No ambiguous homonyms detected. Context is solid.</div>`;
                     }
-
                 } else if (endpoint === 'info_gap') {
                     if (data.gaps && data.gaps.length > 0) {
-                        data.gaps.forEach(g => {
+                        data.gaps.forEach((g, index) => {
                             html += `
-                                <div class="gap-card">
-                                    <div class="gap-label">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                <div class="gap-item" style="animation-delay: ${index * 0.1}s">
+                                    <div class="g-missing">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                                         Missing: ${escapeHtml(g.missing)}
                                     </div>
-                                    <div class="gap-sentence">"${escapeHtml(g.sentence)}"</div>
-                                </div>`;
+                                    <div class="g-sentence">"${escapeHtml(g.sentence)}"</div>
+                                </div>
+                            `;
                         });
                     } else {
-                        html = `<div class="empty-state ok">No information gaps detected. Text appears complete.</div>`;
+                        html = `<div class="alert success"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> All required parameters are present. No gaps detected.</div>`;
                     }
                 }
 
@@ -852,7 +953,7 @@
 
             } catch (err) {
                 console.error(err);
-                jsonEl.innerHTML = `<div class="empty-state err">Connection error. Is the server running?</div>`;
+                jsonEl.innerHTML = `<div class="alert error"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Connection error. Backend services unavailable.</div>`;
                 outEl.classList.add('visible');
             } finally {
                 btnEl.disabled = false;

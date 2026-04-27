@@ -71,7 +71,7 @@ def _get_gemini_client():
 # GEMINI REWRITING ENGINE
 # ============================================================================
 
-def _build_prompt(text: str, target: int, original_count: int) -> str:
+def _build_prompt(text: str, target: int, original_count: int, critical_entities: list) -> str:
     if target < original_count:
         mode_instruction = (
             "COMPRESS the text. Rewrite it shorter while preserving the core meaning. "
@@ -87,12 +87,17 @@ def _build_prompt(text: str, target: int, original_count: int) -> str:
             "REFINE the text. Improve grammar, clarity, and style while keeping the same length."
         )
 
+    entity_instruction = ""
+    if critical_entities:
+        entities_str = ", ".join(critical_entities)
+        entity_instruction = f"\nCRITICAL ENTITIES TO PRESERVE:\n{entities_str}\n\nYou MUST preserve these details in your rewritten text. Preserving these details is more important than hitting the exact word count if forced to choose.\n"
+
     return f"""You are a professional English rewriting assistant.
 
 TASK: {mode_instruction}
-
+{entity_instruction}
 STRICT RULES:
-- Output MUST be EXACTLY {target} words. Count carefully.
+- Output MUST be close to {target} words. Count carefully.
 - Output ONLY the rewritten text — no explanations, no labels, no quotes.
 - Preserve the original meaning strictly.
 - Use natural, professional English.
@@ -103,18 +108,18 @@ STRICT RULES:
 ORIGINAL TEXT ({original_count} words):
 {text}
 
-TARGET: exactly {target} words.
+TARGET: approximately {target} words.
 
 Rewritten text:"""
 
 
-def _gemini_rewrite(text: str, target: int, original_count: int) -> str | None:
+def _gemini_rewrite(text: str, target: int, original_count: int, critical_entities: list, tolerance: int) -> str | None:
     """Call Gemini API with retries. Returns best valid output or None."""
     client = _get_gemini_client()
     if client is None:
         return None
 
-    prompt = _build_prompt(text, target, original_count)
+    prompt = _build_prompt(text, target, original_count, critical_entities)
     best_result = None
     best_deviation = float('inf')
     max_attempts = 3
@@ -142,7 +147,7 @@ def _gemini_rewrite(text: str, target: int, original_count: int) -> str | None:
             wc = _count_words(raw)
             dev = abs(wc - target)
 
-            if dev <= WORD_TOLERANCE:
+            if dev <= tolerance:
                 logger.info(f"Attempt {attempt}: exact match ({wc}w, target {target})")
                 return raw
 
@@ -152,10 +157,11 @@ def _gemini_rewrite(text: str, target: int, original_count: int) -> str | None:
                 logger.info(f"Attempt {attempt}: kept as best ({wc}w, dev {dev})")
 
             # Retry with tighter prompt
+            retry_entities = f"Make sure to preserve these entities: {', '.join(critical_entities)}\n" if critical_entities else ""
             prompt = f"""Rewrite the following text to EXACTLY {target} words.
 Your previous attempt was {wc} words which is wrong. Adjust to exactly {target} words.
 Output ONLY the rewritten text.
-
+{retry_entities}
 Original: {text}
 
 Rewritten ({target} words):"""
@@ -377,30 +383,55 @@ def _remove_fillers(text):
     return ' '.join(result)
 
 
-def _score_sentence(sent, position, total):
+def _score_sentence(sent, position, total, critical_entities=None):
     doc = _get_doc(sent)
     words = sent.split()
     if not words:
         return 0.0
+        
+    critical_words = set()
+    if critical_entities:
+        for ent in critical_entities:
+            for w in ent.split():
+                critical_words.add(w.lower().strip('.,!?;:'))
+                
+    content = 0
     if doc:
-        content = sum(1 for t in doc if t.pos_ in ('NOUN', 'PROPN', 'VERB', 'NUM'))
+        for token in doc:
+            word_clean = token.text.lower().strip('.,!?;:')
+            if word_clean in critical_words or token.ent_type_ in ('TIME', 'DATE', 'GPE', 'LOC', 'PERSON', 'ORG', 'MONEY', 'CARDINAL', 'QUANTITY'):
+                content += 5 # High boost for critical entities
+            elif token.pos_ in ('NOUN', 'PROPN', 'VERB', 'NUM'):
+                content += 1
     else:
         content = sum(1 for w in words if len(w) > 3)
+        
     density = content / len(words)
     bonus = 1.3 if position == 0 else 1.0
     return density * bonus
 
 
-def _compress_single_sentence(text, target):
+def _compress_single_sentence(text, target, critical_entities=None):
     doc = _get_doc(text)
     words = text.split()
     if not doc or len(words) <= target:
         return ' '.join(words[:target])
+        
+    critical_words = set()
+    if critical_entities:
+        for ent in critical_entities:
+            for w in ent.split():
+                critical_words.add(w.lower().strip('.,!?;:'))
+                
     scored = []
     for i, token in enumerate(doc):
         if i >= len(words):
             break
-        if token.pos_ in ('NOUN', 'PROPN', 'NUM'):
+            
+        word_clean = words[i].lower().strip('.,!?;:')
+        if word_clean in critical_words or token.ent_type_ in ('TIME', 'DATE', 'GPE', 'LOC', 'PERSON', 'ORG', 'MONEY', 'CARDINAL', 'QUANTITY'):
+            score = 100.0
+        elif token.pos_ in ('NOUN', 'PROPN', 'NUM'):
             score = 5.0
         elif token.pos_ == 'VERB' and token.dep_ != 'aux':
             score = 4.0
@@ -416,25 +447,27 @@ def _compress_single_sentence(text, target):
             score = 0.1
         else:
             score = 1.0
+            
         if i == 0:
             score *= 1.5
         scored.append((score, i))
+        
     scored.sort(key=lambda x: -x[0])
     keep = set(s[1] for s in scored[:target])
     result = [words[i] for i in sorted(keep) if i < len(words)]
     return ' '.join(result)
 
 
-def _smart_trim(text, target):
+def _smart_trim(text, target, tolerance, critical_entities=None):
     words = text.split()
     if len(words) <= target:
         return text
-    candidate_words = words[:target + WORD_TOLERANCE]
-    for i in range(min(len(candidate_words) - 1, target + WORD_TOLERANCE - 1),
-                   max(0, target - WORD_TOLERANCE - 1), -1):
+    candidate_words = words[:target + tolerance]
+    for i in range(min(len(candidate_words) - 1, target + tolerance - 1),
+                   max(0, target - tolerance - 1), -1):
         if candidate_words[i].rstrip().endswith(('.', '!', '?')):
             candidate = ' '.join(candidate_words[:i + 1])
-            if abs(_count_words(candidate) - target) <= WORD_TOLERANCE:
+            if abs(_count_words(candidate) - target) <= tolerance:
                 return candidate
     result = ' '.join(words[:target])
     rwords = result.split()
@@ -452,39 +485,43 @@ def _smart_trim(text, target):
 
 
 def _fallback_compress(text, target, info):
+    tolerance = info['tolerance']
+    critical_entities = info['critical_entities']
+    
     result = _shorten_phrases(text)
     result = _remove_fillers(result)
-    if abs(_count_words(result) - target) <= WORD_TOLERANCE:
+    if abs(_count_words(result) - target) <= tolerance:
         return result
     current = _count_words(result)
-    if current > target + WORD_TOLERANCE:
+    if current > target + tolerance:
         sentences = get_sentences(result)
         if len(sentences) > 1:
             scored = []
             for i, s in enumerate(sentences):
-                sc = _score_sentence(s, i, len(sentences))
+                sc = _score_sentence(s, i, len(sentences), critical_entities)
                 scored.append((sc, i, s))
             scored.sort(key=lambda x: -x[0])
             selected = set()
             running = 0
             for sc, idx, s in scored:
                 wc = _count_words(s)
-                if running + wc <= target + WORD_TOLERANCE:
+                if running + wc <= target + tolerance:
                     selected.add(idx)
                     running += wc
             if not selected:
                 selected.add(scored[0][1])
             result = ' '.join(sentences[i] for i in sorted(selected))
-            if _count_words(result) > target + WORD_TOLERANCE:
-                result = _compress_single_sentence(result, target)
+            if _count_words(result) > target + tolerance:
+                result = _compress_single_sentence(result, target, critical_entities)
         else:
-            result = _compress_single_sentence(result, target)
-    if _count_words(result) > target + WORD_TOLERANCE:
-        result = _smart_trim(result, target)
+            result = _compress_single_sentence(result, target, critical_entities)
+    if _count_words(result) > target + tolerance:
+        result = _smart_trim(result, target, tolerance, critical_entities)
     return result
 
 
 def _fallback_expand(text, target, info):
+    tolerance = info['tolerance']
     result = text
     # Expand abbreviations
     words = result.split()
@@ -497,7 +534,7 @@ def _fallback_expand(text, target, info):
         else:
             expanded.append(word)
     result = ' '.join(expanded)
-    if _count_words(result) >= target - WORD_TOLERANCE:
+    if _count_words(result) >= target - tolerance:
         return result
     # Structurize fragments
     doc = _get_doc(result)
@@ -525,7 +562,7 @@ def _fallback_expand(text, target, info):
             if doc[0].pos_ not in ('DET', 'PROPN'):
                 subj = 'The ' + subj[0].lower() + subj[1:]
             result = f"{subj} is being planned"
-    if _count_words(result) >= target - WORD_TOLERANCE:
+    if _count_words(result) >= target - tolerance:
         return result
     # Add modifiers
     doc = _get_doc(result)
@@ -563,13 +600,13 @@ def _fallback_refine(text):
     return result
 
 
-def _enforce_target(text, original, target):
+def _enforce_target(text, original, target, tolerance):
     count = _count_words(text)
-    if abs(count - target) <= WORD_TOLERANCE:
+    if abs(count - target) <= tolerance:
         return text
-    if count > target + WORD_TOLERANCE:
-        return _smart_trim(text, target)
-    if count < target - WORD_TOLERANCE:
+    if count > target + tolerance:
+        return _smart_trim(text, target, tolerance, [])
+    if count < target - tolerance:
         words_needed = target - count
         orig_words = original.split()
         current_lower = set(w.lower().strip('.,!?;:') for w in text.split())
@@ -584,8 +621,8 @@ def _enforce_target(text, original, target):
         if extras:
             base = text.rstrip('.!?')
             result = base + ' ' + ' '.join(extras[:words_needed]) + '.'
-            if _count_words(result) > target + WORD_TOLERANCE:
-                result = _smart_trim(result, target)
+            if _count_words(result) > target + tolerance:
+                result = _smart_trim(result, target, tolerance, [])
             return result
     return text
 
@@ -598,12 +635,34 @@ def _analyze_input(text, target):
     original_count = _count_words(text)
     sentences = get_sentences(text)
     diff = target - original_count
-    if abs(diff) <= WORD_TOLERANCE:
+    
+    # Entity Extraction using spaCy
+    doc = _get_doc(text)
+    critical_entities = []
+    if doc:
+        for ent in doc.ents:
+            if ent.label_ in ('TIME', 'DATE', 'GPE', 'LOC', 'PERSON', 'ORG', 'MONEY', 'CARDINAL', 'QUANTITY', 'FAC'):
+                critical_entities.append(ent.text)
+                
+    # Regex fallback for time and money if spaCy misses them
+    time_regex = re.findall(r'\b\d{1,2}:\d{2}(?:\s?[aApP][mM])?\b', text)
+    money_regex = re.findall(r'\$\d+(?:,\d{3})*(?:\.\d{2})?', text)
+    critical_entities.extend(time_regex)
+    critical_entities.extend(money_regex)
+    
+    # Deduplicate and sort to maintain stable output
+    critical_entities = sorted(list(set(critical_entities)))
+    
+    # Dynamic tolerance logic
+    tolerance = 3 if critical_entities else 2
+
+    if abs(diff) <= tolerance:
         mode = 'refine'
     elif diff < 0:
         mode = 'compress'
     else:
         mode = 'expand'
+        
     return {
         'original_count': original_count,
         'sentences': sentences,
@@ -611,6 +670,8 @@ def _analyze_input(text, target):
         'target': target,
         'diff': diff,
         'mode': mode,
+        'critical_entities': critical_entities,
+        'tolerance': tolerance
     }
 
 
@@ -623,10 +684,10 @@ def analyze_length_and_rewrite(text: str, target_word_count: int) -> dict:
     Rewrites text to target word count using Gemini AI with deterministic fallback.
 
     Pipeline:
-      1. Analyze input -> determine mode
-      2. Try Gemini AI rewrite (up to 3 attempts)
+      1. Analyze input -> determine mode and critical entities
+      2. Try Gemini AI rewrite (up to 3 attempts) preserving entities
       3. If Gemini fails/unavailable, use deterministic fallback engine
-      4. Post-process and enforce target ±2
+      4. Post-process and enforce target ± tolerance
       5. Return compatible JSON response
 
     Returns dict compatible with existing frontend.
@@ -646,11 +707,13 @@ def analyze_length_and_rewrite(text: str, target_word_count: int) -> dict:
     target_word_count = max(3, target_word_count)
     info = _analyze_input(text, target_word_count)
     original_count = info['original_count']
+    tolerance = info['tolerance']
+    critical_entities = info['critical_entities']
 
     # Near-equal mode: quick refine
     if info['mode'] == 'refine':
         # Try Gemini even for refinement
-        gemini_out = _gemini_rewrite(text, target_word_count, original_count)
+        gemini_out = _gemini_rewrite(text, target_word_count, original_count, critical_entities, tolerance)
         if gemini_out:
             result = _postprocess(gemini_out)
         else:
@@ -668,20 +731,20 @@ def analyze_length_and_rewrite(text: str, target_word_count: int) -> dict:
 
     # --- Primary: Gemini AI rewrite ---
     used_gemini = False
-    gemini_out = _gemini_rewrite(text, target_word_count, original_count)
+    gemini_out = _gemini_rewrite(text, target_word_count, original_count, critical_entities, tolerance)
 
     if gemini_out:
         result = _postprocess(gemini_out)
         wc = _count_words(result)
-        if abs(wc - target_word_count) <= WORD_TOLERANCE:
+        if abs(wc - target_word_count) <= tolerance:
             used_gemini = True
             logger.info(f"Gemini output accepted ({wc}w)")
         else:
             # Try enforcement on Gemini output
-            enforced = _enforce_target(result, text, target_word_count)
+            enforced = _enforce_target(result, text, target_word_count, tolerance)
             enforced = _postprocess(enforced)
             ewc = _count_words(enforced)
-            if abs(ewc - target_word_count) <= WORD_TOLERANCE:
+            if abs(ewc - target_word_count) <= tolerance:
                 result = enforced
                 used_gemini = True
                 logger.info(f"Gemini output enforced to {ewc}w")
@@ -700,22 +763,22 @@ def analyze_length_and_rewrite(text: str, target_word_count: int) -> dict:
             result = _fallback_expand(text, target_word_count, info)
 
         result = _postprocess(result)
-        result = _enforce_target(result, text, target_word_count)
+        result = _enforce_target(result, text, target_word_count, tolerance)
         result = _postprocess(result)
 
     # Final response
     final_count = _count_words(result)
     deviation = final_count - target_word_count
 
-    if abs(deviation) <= WORD_TOLERANCE:
+    if abs(deviation) <= tolerance:
         status = "success"
-        message = f"Rewritten to {final_count} words (target: {target_word_count}, ±{WORD_TOLERANCE})"
+        message = f"Rewritten to {final_count} words (target: {target_word_count}, ±{tolerance})"
     else:
         status = "partial"
         message = f"Best effort: {final_count} words (target: {target_word_count})"
 
     engine = "gemini" if used_gemini else "fallback"
-    logger.info(f"Final: {final_count}w | target: {target_word_count} | engine: {engine} | status: {status}")
+    logger.info(f"Final: {final_count}w | target: {target_word_count} | engine: {engine} | status: {status} | entities: {len(critical_entities)}")
 
     return {
         "original_word_count": original_count,
