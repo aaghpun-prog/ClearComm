@@ -90,7 +90,7 @@ def _build_prompt(text: str, target: int, original_count: int, critical_entities
     entity_instruction = ""
     if critical_entities:
         entities_str = ", ".join(critical_entities)
-        entity_instruction = f"\nCRITICAL ENTITIES TO PRESERVE:\n{entities_str}\n\nYou MUST preserve these details in your rewritten text. Preserving these details is more important than hitting the exact word count if forced to choose.\n"
+        entity_instruction = f"\nCRITICAL ENTITIES TO PRESERVE:\n{entities_str}\n\nYou MUST preserve these details in your rewritten text. Preserving these details is more important than hitting the exact word count if forced to choose.\nEvery numeric detail from the original text MUST be preserved exactly in output unless impossible.\n"
 
     return f"""You are a professional English rewriting assistant.
 
@@ -650,6 +650,10 @@ def _analyze_input(text, target):
     critical_entities.extend(time_regex)
     critical_entities.extend(money_regex)
     
+    # NEW: Extract ALL numeric tokens
+    numeric_tokens = [w.strip('.,!?;:"\'()[]{}') for w in text.split() if any(c.isdigit() for c in w)]
+    critical_entities.extend(numeric_tokens)
+    
     # Deduplicate and sort to maintain stable output
     critical_entities = sorted(list(set(critical_entities)))
     
@@ -671,6 +675,7 @@ def _analyze_input(text, target):
         'diff': diff,
         'mode': mode,
         'critical_entities': critical_entities,
+        'numeric_tokens': numeric_tokens,
         'tolerance': tolerance
     }
 
@@ -709,6 +714,7 @@ def analyze_length_and_rewrite(text: str, target_word_count: int) -> dict:
     original_count = info['original_count']
     tolerance = info['tolerance']
     critical_entities = info['critical_entities']
+    numeric_tokens = info.get('numeric_tokens', [])
 
     # Near-equal mode: quick refine
     if info['mode'] == 'refine':
@@ -718,6 +724,19 @@ def analyze_length_and_rewrite(text: str, target_word_count: int) -> dict:
             result = _postprocess(gemini_out)
         else:
             result = _postprocess(_fallback_refine(text))
+        
+        # Enforce numeric token preservation
+        missing_numerics = []
+        current_words = set(w.lower().strip('.,!?;:"\'()[]{}') for w in result.split())
+        for num_tok in numeric_tokens:
+            if num_tok.lower() not in current_words and not any(num_tok.lower() in w for w in current_words):
+                missing_numerics.append(num_tok)
+                
+        if missing_numerics:
+            result = result.rstrip('.!?') + ' ' + ' '.join(missing_numerics) + '.'
+            result = _postprocess(result)
+            tolerance = max(tolerance, 3)
+
         final_count = _count_words(result)
         return {
             "original_word_count": original_count,
@@ -765,6 +784,18 @@ def analyze_length_and_rewrite(text: str, target_word_count: int) -> dict:
         result = _postprocess(result)
         result = _enforce_target(result, text, target_word_count, tolerance)
         result = _postprocess(result)
+
+    # Enforce numeric token preservation
+    missing_numerics = []
+    current_words = set(w.lower().strip('.,!?;:"\'()[]{}') for w in result.split())
+    for num_tok in numeric_tokens:
+        if num_tok.lower() not in current_words and not any(num_tok.lower() in w for w in current_words):
+            missing_numerics.append(num_tok)
+            
+    if missing_numerics:
+        result = result.rstrip('.!?') + ' ' + ' '.join(missing_numerics) + '.'
+        result = _postprocess(result)
+        tolerance = max(tolerance, 3)
 
     # Final response
     final_count = _count_words(result)

@@ -2,18 +2,29 @@
 info_gap_detector.py — Smart Hybrid Information Gap Detection System
 
 Architecture:
-  Layer 1: Intent classification (keyword + spaCy-based)
-  Layer 2: Multi-entity extraction (spaCy NER + regex + keyword fallback)
-  Layer 3: Per-intent gap rules (what's required vs what's present)
-  Layer 4: Multi-sentence support (analyze each sentence independently)
-  Layer 5: Confidence filtering (skip casual/general statements)
+  Layer 1: Multi-clause Sentence Splitting (spaCy conjunction logic)
+  Layer 2: General Action Meaning Extraction (ROOT verb & dependency logic)
+  Layer 3: WordNet Generalization (synonym mapping for unseen verbs)
+  Layer 4: Deep Object/Participant Extraction (spaCy dobj, nsubj, NER, Regex)
+  Layer 5: Generalized Semantic Rules (natural slot requirements per action type)
 
-Supports 8 message types:
-  Meeting, Event, Task, Interview, Workshop, Travel, Payment, Emergency
+Supports true generalized reasoning.
 """
 
 import re
+import nltk
+from nltk.corpus import wordnet as wn
 from utils.preprocess import get_spacy_doc, get_sentences
+
+# Ensure wordnet is available
+try:
+    wn.synsets('run')
+except LookupError:
+    try:
+        nltk.download('wordnet', quiet=True)
+        nltk.download('omw-1.4', quiet=True)
+    except:
+        pass
 
 # ==============================================================================
 # ENTITY DETECTION PATTERNS
@@ -21,7 +32,7 @@ from utils.preprocess import get_spacy_doc, get_sentences
 
 RE_TIME = re.compile(
     r'\b\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)\b'
-    r'|\b(?:noon|midnight|morning|afternoon|evening)\b',
+    r'|\b(?:noon|midnight|morning|afternoon|evening|now)\b',
     re.IGNORECASE
 )
 
@@ -51,6 +62,7 @@ LOCATION_KEYWORDS = frozenset({
     'lab', 'library', 'center', 'centre', 'floor', 'block', 'wing',
     'stadium', 'theater', 'theatre', 'cafeteria', 'canteen', 'park',
     'ground', 'field', 'court', 'gym', 'headquarters', 'branch',
+    'there', 'here', 'inside', 'outside', 'home'
 })
 
 ONLINE_MODE_KEYWORDS = [
@@ -59,149 +71,173 @@ ONLINE_MODE_KEYWORDS = [
     'virtual', 'remote', 'offline', 'hybrid',
 ]
 
-
-# ==============================================================================
-# INTENT CLASSIFICATION
-# ==============================================================================
-
-# Words that signal a meeting when they appear before meeting/sync/call keywords
-_MEETING_TRIGGER_WORDS = frozenset({
-    'meeting', 'sync', 'call', 'meet', 'standup', 'huddle', 'meetup',
-    'discussion', 'catch up',
-})
-
-INTENT_KEYWORDS = {
-    "Meeting": {
-        'keywords': ['meeting', 'sync', 'standup', 'stand-up', 'catch up',
-                     'discuss', 'discussion', 'huddle', 'meetup',
-                     'meet', 'call'],
-        'weight': 2,
-    },
-    "Event": {
-        'keywords': ['event', 'fest', 'festival', 'conference', 'ceremony',
-                     'celebration', 'function', 'gathering', 'inaugural',
-                     'annual', 'competition', 'contest', 'hackathon'],
-        'weight': 2,
-    },
-    "Task": {
-        'keywords': ['submit', 'update', 'complete', 'finish', 'prepare',
-                     'review', 'send', 'fix', 'resolve', 'implement',
-                     'upload', 'deliver', 'deploy', 'report', 'assignment',
-                     'task', 'need to', 'must', 'required', 'please',
-                     'ensure', 'verify', 'check'],
-        'weight': 1,
-    },
-    "Interview": {
-        'keywords': ['interview', 'hiring', 'recruitment', 'job', 'position',
-                     'role', 'vacancy', 'candidate', 'applicant', 'resume',
-                     'placement', 'selection'],
-        'weight': 2,
-    },
-    "Workshop": {
-        'keywords': ['workshop', 'seminar', 'webinar', 'tutorial', 'training',
-                     'session', 'lecture', 'course', 'masterclass', 'bootcamp',
-                     'demonstration', 'orientation'],
-        'weight': 2,
-    },
-    "Travel": {
-        'keywords': ['visit', 'travel', 'trip', 'tour', 'go to', 'fly',
-                     'drive', 'commute', 'journey', 'outing', 'field trip',
-                     'site visit', 'client visit'],
-        'weight': 2,
-    },
-    "Payment": {
-        'keywords': ['pay', 'payment', 'fees', 'fee', 'purchase', 'buy',
-                     'cost', 'charge', 'invoice', 'bill', 'dues', 'rent',
-                     'subscription', 'deposit', 'transfer', 'reimburse',
-                     'sale', 'selling', 'sell', 'discount', 'offer', 'price'],
-        'weight': 1,
-    },
-    "Emergency": {
-        'keywords': ['urgent', 'emergency', 'critical', 'asap', 'immediately',
-                     'right now', 'priority', 'alert', 'warning', 'danger',
-                     'outage', 'downtime', 'incident', 'escalate'],
-        'weight': 2,
-    },
-}
-
-# What fields each intent requires
-INTENT_REQUIRED_FIELDS = {
-    "Meeting": {
-        'fields': ['time', 'location'],
-        'labels': {
-            'time': 'Time',
-            'location': 'Venue/Location',
-        },
-    },
-    "Event": {
-        'fields': ['date', 'time', 'location'],
-        'labels': {
-            'date': 'Date',
-            'time': 'Time',
-            'location': 'Venue',
-        },
-    },
-    "Task": {
-        'fields': ['deadline', 'assignee'],
-        'labels': {
-            'deadline': 'Deadline',
-            'assignee': 'Assignee',
-        },
-    },
-    "Interview": {
-        'fields': ['date', 'time', 'location'],
-        'labels': {
-            'date': 'Date',
-            'time': 'Time',
-            'location': 'Venue/Mode',
-        },
-    },
-    "Workshop": {
-        'fields': ['date', 'time', 'location'],
-        'labels': {
-            'date': 'Date',
-            'time': 'Time',
-            'location': 'Venue',
-        },
-    },
-    "Travel": {
-        'fields': ['date', 'time', 'destination'],
-        'labels': {
-            'date': 'Date',
-            'time': 'Time',
-            'destination': 'Destination',
-        },
-    },
-    "Payment": {
-        'fields': ['amount', 'deadline', 'recipient'],
-        'labels': {
-            'amount': 'Amount',
-            'deadline': 'Deadline',
-            'recipient': 'Recipient',
-        },
-    },
-    "Emergency": {
-        'fields': ['action', 'contact'],
-        'labels': {
-            'action': 'Required Action',
-            'contact': 'Contact Person',
-        },
-    },
-}
-
-# Casual phrases — skip entirely
-CASUAL_KEYWORDS = [
+CASUAL_KEYWORDS = frozenset({
     'hello', 'hi', 'hey', 'good morning', 'good evening', 'good afternoon',
     'good night', 'thanks', 'thank you', 'bye', 'goodbye', 'see you',
     'nice weather', 'how are you', 'what\'s up', 'take care', 'well done',
-    'congratulations', 'happy birthday', 'cheers',
-]
-
-# General statement indicators (not actionable)
-GENERAL_INDICATORS = frozenset({
-    'is', 'are', 'was', 'were', 'has been', 'have been', 'will be',
+    'congratulations', 'happy birthday', 'cheers'
 })
 
+# ==============================================================================
+# GENERAL ACTION SEMANTICS
+# ==============================================================================
+
+FAMILY_VERBS = {
+    'Travel': frozenset({'go', 'come', 'arrive', 'reach', 'visit', 'travel', 'head', 'proceed', 'enter', 'return', 'leave', 'move', 'depart'}),
+    'Meeting': frozenset({'meet', 'join', 'attend', 'gather', 'assemble', 'report', 'connect', 'see', 'convene'}),
+    'Task': frozenset({'submit', 'upload', 'send', 'finish', 'complete', 'prepare', 'review', 'fix', 'deploy', 'update', 'deliver', 'dispatch', 'assign', 'book', 'reserve'}),
+    'Payment': frozenset({'pay', 'transfer', 'buy', 'purchase', 'reimburse', 'deposit', 'remit', 'spend', 'charge'}),
+    'Communication': frozenset({'call', 'inform', 'notify', 'email', 'message', 'contact', 'tell', 'ask', 'reply', 'ping'})
+}
+
+# Pre-fetch synsets for WordNet generalization mapping
+FAMILY_REPS = {}
+try:
+    FAMILY_REPS = {
+        'Travel': [wn.synset('travel.v.01'), wn.synset('move.v.02')],
+        'Meeting': [wn.synset('meet.v.01'), wn.synset('assemble.v.01')],
+        'Task': [wn.synset('submit.v.01'), wn.synset('deliver.v.01'), wn.synset('perform.v.01')],
+        'Payment': [wn.synset('pay.v.01'), wn.synset('buy.v.01')],
+        'Communication': [wn.synset('communicate.v.01'), wn.synset('inform.v.01')]
+    }
+except Exception:
+    pass
+
+def _split_clauses(text: str) -> list:
+    """Intelligently split multi-action sentences using spaCy conjunction logic."""
+    doc = get_spacy_doc(text)
+    if not doc:
+        return [text]
+        
+    clauses = []
+    current_clause = []
+    
+    for token in doc:
+        if token.lower_ in ('and', 'but', 'then'):
+            # If there's another verb closely following, it's likely a distinct action clause
+            has_verb_after = any(t.pos_ == 'VERB' for t in doc[token.i + 1 : token.i + 5])
+            if has_verb_after:
+                if current_clause:
+                    clauses.append(''.join(current_clause).strip())
+                    current_clause = []
+                continue
+        current_clause.append(token.text_with_ws)
+        
+    if current_clause:
+        clauses.append(''.join(current_clause).strip())
+        
+    # Filter out empty or trivially small non-action parts
+    valid_clauses = [c for c in clauses if len(c.split()) > 1]
+    return valid_clauses if valid_clauses else [text]
+
+def _extract_main_action(doc) -> str:
+    """Extract the main action verb of the sentence using dependency parsing."""
+    if not doc:
+        return None
+        
+    # 1. Imperative (starts with verb)
+    if len(doc) > 0 and doc[0].pos_ == 'VERB':
+        return doc[0].lemma_.lower()
+        
+    # 2. Root verb
+    for token in doc:
+        if token.pos_ == 'VERB' and token.dep_ == 'ROOT':
+            return token.lemma_.lower()
+            
+    # 3. Any verb fallback
+    for token in doc:
+        if token.pos_ == 'VERB':
+            return token.lemma_.lower()
+            
+    return None
+
+def _get_action_family(verb: str) -> tuple:
+    """Determine the semantic family of a given verb, returning (family, matching_method)."""
+    if not verb:
+        return None, None
+        
+    # Direct fast mapping
+    for family, verbs in FAMILY_VERBS.items():
+        if verb in verbs:
+            return family, 'direct'
+            
+    # Generalization using WordNet similarity for unseen verbs
+    if FAMILY_REPS:
+        try:
+            verb_synsets = wn.synsets(verb, pos=wn.VERB)
+            if verb_synsets:
+                best_family = None
+                max_sim = 0.45  # Semantic similarity threshold
+                
+                for v_syn in verb_synsets:
+                    for family, reps in FAMILY_REPS.items():
+                        for rep_syn in reps:
+                            sim = v_syn.path_similarity(rep_syn)
+                            if sim and sim > max_sim:
+                                max_sim = sim
+                                best_family = family
+                                
+                if best_family:
+                    return best_family, 'wordnet'
+        except Exception:
+            pass
+            
+    return None, None
+
+
+# ==============================================================================
+# INTENT KEYWORDS & REQUIRED FIELDS
+# ==============================================================================
+
+INTENT_KEYWORDS = {
+    "Event": {'keywords': ['event', 'fest', 'festival', 'conference', 'ceremony', 'gathering'], 'weight': 2},
+    "Workshop": {'keywords': ['workshop', 'seminar', 'webinar', 'tutorial', 'training', 'masterclass'], 'weight': 2},
+    "Interview": {'keywords': ['interview', 'hiring', 'recruitment', 'job', 'applicant'], 'weight': 2},
+    "Emergency": {'keywords': ['urgent', 'emergency', 'critical', 'asap', 'immediately', 'priority'], 'weight': 2},
+    "Task": {'keywords': ['need to', 'have to', 'must', 'should', 'please', 'ensure', 'verify'], 'weight': 1},
+}
+
+INTENT_REQUIRED_FIELDS = {
+    # Core Semantic Action Families
+    "Travel": {
+        'fields': ['location', 'time'],
+        'labels': {'location': 'Destination/Location', 'time': 'Time'},
+    },
+    "Meeting": {
+        'fields': ['participant', 'location', 'time'],
+        'labels': {'participant': 'Person/Group', 'location': 'Location/Mode', 'time': 'Time'},
+    },
+    "Task": {
+        'fields': ['object', 'assignee', 'deadline'],
+        'labels': {'object': 'Task Object', 'assignee': 'Assignee', 'deadline': 'Deadline'},
+    },
+    "Payment": {
+        'fields': ['amount', 'recipient', 'deadline'],
+        'labels': {'amount': 'Amount', 'recipient': 'Recipient', 'deadline': 'Date/Time'},
+    },
+    "Communication": {
+        'fields': ['recipient', 'object'],
+        'labels': {'recipient': 'Recipient', 'object': 'Content/Topic'},
+    },
+    
+    # Specific Domain Fallbacks
+    "Event": {
+        'fields': ['date', 'time', 'location'],
+        'labels': {'date': 'Date', 'time': 'Time', 'location': 'Venue'},
+    },
+    "Interview": {
+        'fields': ['date', 'time', 'location'],
+        'labels': {'date': 'Date', 'time': 'Time', 'location': 'Venue/Mode'},
+    },
+    "Workshop": {
+        'fields': ['date', 'time', 'location'],
+        'labels': {'date': 'Date', 'time': 'Time', 'location': 'Venue'},
+    },
+    "Emergency": {
+        'fields': ['action', 'contact'],
+        'labels': {'action': 'Required Action', 'contact': 'Contact Person'},
+    },
+}
 
 # ==============================================================================
 # ENTITY EXTRACTION
@@ -209,8 +245,7 @@ GENERAL_INDICATORS = frozenset({
 
 def _extract_entities(text: str) -> dict:
     """
-    Extract all information entities using spaCy NER + regex + keyword fallback.
-    Returns a dict of booleans indicating presence of each entity type.
+    Extract all information entities using spaCy NER, dependencies, regex, and keywords.
     """
     doc = get_spacy_doc(text)
     text_lower = text.lower()
@@ -225,23 +260,32 @@ def _extract_entities(text: str) -> dict:
         'link': bool(RE_URL.search(text)),
         'mode': any(re.search(rf'\b{re.escape(m)}\b', text_lower) for m in ONLINE_MODE_KEYWORDS),
         'organization': False,
+        'object': False,
     }
 
-    # spaCy NER extraction
+    has_object_dep = False
+
     if doc:
-        for ent in doc.ents:
-            if ent.label_ == 'TIME':
-                entities['time'] = True
-            elif ent.label_ == 'DATE':
-                entities['date'] = True
-            elif ent.label_ in ('GPE', 'LOC', 'FAC'):
-                entities['location'] = True
-            elif ent.label_ == 'MONEY':
-                entities['money'] = True
-            elif ent.label_ == 'PERSON':
+        for token in doc:
+            # NER Mapping
+            if token.ent_type_ == 'TIME': entities['time'] = True
+            elif token.ent_type_ == 'DATE': entities['date'] = True
+            elif token.ent_type_ in ('GPE', 'LOC', 'FAC'): entities['location'] = True
+            elif token.ent_type_ == 'MONEY': entities['money'] = True
+            elif token.ent_type_ == 'PERSON': entities['person'] = True
+            elif token.ent_type_ == 'ORG': entities['organization'] = True
+            
+            # Semantic object mapping (dobj, pobj)
+            if token.dep_ in ('dobj', 'pobj', 'attr', 'nsubjpass'):
+                if token.lemma_.lower() not in ('it', 'this', 'that', 'there', 'here', 'them'):
+                    has_object_dep = True
+                    
+            # Pronoun subject mapping (satisfies assignee implicitly)
+            if token.dep_ == 'nsubj' and token.pos_ == 'PRON':
                 entities['person'] = True
-            elif ent.label_ == 'ORG':
-                entities['organization'] = True
+
+    # Finalize Object status
+    entities['object'] = has_object_dep or entities['link']
 
     # Keyword fallback for locations
     if not entities['location']:
@@ -263,117 +307,74 @@ def _extract_entities(text: str) -> dict:
 
 
 # ==============================================================================
-# INTENT CLASSIFICATION
+# CLASSIFICATION LOGIC
 # ==============================================================================
 
-def _is_casual(text: str) -> bool:
-    """Filter out non-actionable pleasantries and greetings."""
+def _is_casual_or_general(text: str) -> bool:
     text_lower = text.lower().strip()
     words = text_lower.split()
+    
     if len(words) <= 6:
         for cw in CASUAL_KEYWORDS:
             if cw in text_lower:
                 return True
-    return False
-
-
-def _is_general_statement(text: str) -> bool:
-    """Detect general factual statements that don't need gap analysis."""
+                
     doc = get_spacy_doc(text)
     if not doc:
         return False
-
-    text_lower = text.lower()
-
-    # Check for imperative (starts with verb) — NOT general
+        
+    # Imperative is usually actionable, not general fact
     if doc[0].pos_ == 'VERB':
         return False
-
-    # Check for any intent keywords — NOT general
-    for intent_data in INTENT_KEYWORDS.values():
-        for kw in intent_data['keywords']:
-            if re.search(rf'\b{re.escape(kw)}\b', text_lower):
-                return False
-
-    # If no action keywords and has typical general structure, it's general
+        
     has_action_verb = any(
         t.pos_ == 'VERB' and t.dep_ in ('ROOT',) and t.lemma_ not in (
             'be', 'have', 'do', 'seem', 'appear', 'look', 'feel', 'become'
         )
         for t in doc
     )
-
-    # General facts typically have "is/are" as main verb
     has_copula = any(t.lemma_ == 'be' and t.dep_ == 'ROOT' for t in doc)
+    
     if has_copula and not has_action_verb:
         return True
-
+        
     return False
 
-
-def _classify_intent(text: str) -> tuple:
+def _classify_intent(text: str, doc) -> tuple:
     """
-    Classify message intent using keyword matching.
-    Returns (intent_name: str | None, confidence: str).
-
-    Tie-breaking: If both Meeting and Task score, prefer Meeting when the
-    sentence also contains time/date/mode indicators (Rule #2).
+    Classify message intent using General Action Meaning + Keyword fallback.
+    Returns (intent, confidence, main_verb)
     """
     text_lower = text.lower()
     scores = {}
 
+    # 1. General Action Meaning Engine
+    main_verb = _extract_main_action(doc)
+    family, method = _get_action_family(main_verb)
+    
+    if family:
+        # Action semantics take massive priority
+        scores[family] = 10
+        confidence = 'High' if method == 'direct' else 'Medium'
+        return family, confidence, main_verb
+
+    # 2. Domain Keyword Fallbacks
     for intent, data in INTENT_KEYWORDS.items():
         score = 0
         for kw in data['keywords']:
             if re.search(rf'\b{re.escape(kw)}\b', text_lower):
                 score += data['weight']
         if score > 0:
-            scores[intent] = score
+            scores[intent] = scores.get(intent, 0) + score
 
     if not scores:
-        return None, 'Low'
+        return None, 'Low', main_verb
 
-    # Rule #2: Meeting wins over Task when meet/call/zoom + time/date present
-    if 'Meeting' in scores and 'Task' in scores:
-        has_time_or_date = bool(RE_TIME.search(text) or RE_DATE.search(text))
-        has_mode = any(re.search(rf'\b{re.escape(m)}\b', text_lower) for m in ONLINE_MODE_KEYWORDS)
-        if has_time_or_date or has_mode:
-            scores['Meeting'] += 3  # Strong boost
-
-    # Pick highest scoring intent
     best = max(scores, key=scores.get)
     best_score = scores[best]
 
-    # Confidence based on score
-    if best_score >= 4:
-        confidence = 'High'
-    elif best_score >= 2:
-        confidence = 'High'
-    else:
-        confidence = 'Medium'
-
-    return best, confidence
-
-
-def _classify_intent_fallback(text: str) -> tuple:
-    """
-    Fallback intent classification using spaCy dependency parsing.
-    Detects imperative sentences (task commands).
-    """
-    doc = get_spacy_doc(text)
-    if not doc or len(doc) == 0:
-        return None, 'Low'
-
-    # Imperative sentence: starts with verb
-    if doc[0].pos_ == 'VERB':
-        return 'Task', 'Medium'
-
-    # Check for "need to", "have to" patterns
-    text_lower = text.lower()
-    if any(p in text_lower for p in ['need to', 'have to', 'must', 'should']):
-        return 'Task', 'Medium'
-
-    return None, 'Low'
+    confidence = 'Medium' if best_score >= 2 else 'Low'
+    return best, confidence, main_verb
 
 
 # ==============================================================================
@@ -381,131 +382,136 @@ def _classify_intent_fallback(text: str) -> tuple:
 # ==============================================================================
 
 def _check_field_present(field: str, entities: dict, text_lower: str) -> bool:
-    """Check if a required field is present in the extracted entities or text."""
-
-    if field == 'date':
-        return entities['date']
-
-    elif field == 'time':
-        return entities['time']
-
-    elif field in ('location', 'destination'):
-        return entities['location'] or entities['mode']
-
-    elif field == 'assignee':
-        return entities['person'] or entities['organization']
-
-    elif field == 'deadline':
-        return entities['date'] or entities['time']
-
-    elif field == 'amount':
-        return entities['money']
-
-    elif field == 'recipient':
-        return entities['person'] or entities['organization'] or entities['contact']
-
-    elif field == 'contact':
-        return entities['contact'] or entities['person'] or entities['link']
-
-    elif field == 'action':
-        # For emergency: check if a specific action is mentioned
+    if field == 'date': return entities['date']
+    if field == 'time': return entities['time']
+    if field == 'location': return entities['location'] or entities['mode']
+    if field == 'assignee': return entities['person'] or entities['organization']
+    if field == 'deadline': return entities['date'] or entities['time']
+    if field == 'amount': return entities['money']
+    if field == 'recipient': return entities['person'] or entities['organization'] or entities['contact']
+    if field == 'participant': return entities['person'] or entities['organization'] or entities['contact']
+    if field == 'object': return entities['object']
+    if field == 'action':
         doc = get_spacy_doc(text_lower)
         if doc:
             return any(t.pos_ == 'VERB' and t.dep_ == 'ROOT'
                       and t.lemma_ not in ('be', 'have') for t in doc)
-        return False
-
-    elif field == 'agenda':
-        # Check if purpose/topic is mentioned via explicit keywords
-        purpose_keywords = ['about', 'regarding', 'for', 'to discuss',
-                          'to review', 'to plan', 'on topic', 'agenda']
-        if any(kw in text_lower for kw in purpose_keywords):
-            return True
-
-        # Rule #1: Topic words BEFORE a meeting trigger word count as agenda.
-        # e.g. "project sync meeting" → "project" is the topic/agenda.
-        for trigger in _MEETING_TRIGGER_WORDS:
-            pattern = re.search(rf'(\S+(?:\s+\S+){{0,3}})\s+{re.escape(trigger)}\b', text_lower)
-            if pattern:
-                prefix = pattern.group(1).strip()
-                # Filter out non-topic prefixes (articles, pronouns, "let's", etc.)
-                noise = {'the', 'a', 'an', 'our', 'my', 'your', 'their', 'its',
-                         'this', 'that', 'team', 'group', 'let', "let's", 'lets',
-                         'we', 'i', 'he', 'she', 'they', 'weekly', 'daily',
-                         'monthly', 'annual', 'quick', 'brief', 'short',
-                         'scheduled', 'upcoming', 'next', 'catch'}
-                prefix_words = [w for w in prefix.split() if w.lower() not in noise]
-                if prefix_words:
-                    return True  # Found topic words before meeting keyword
-
-        return False
-
     return False
 
-
 def _detect_gaps_for_sentence(sentence: str) -> dict | None:
-    """
-    Detect information gaps for a single sentence.
-    Returns a gap dict or None if no gaps found.
-    """
     text = sentence.strip()
     if not text:
         return None
 
-    # Skip casual messages
-    if _is_casual(text):
-        return None
-
-    # Skip general factual statements
-    if _is_general_statement(text):
+    if _is_casual_or_general(text):
         return None
 
     text_lower = text.lower()
+    doc = get_spacy_doc(text)
 
-    # Extract entities
     entities = _extract_entities(text)
-
-    # Classify intent
-    intent, confidence = _classify_intent(text)
-
-    # Fallback classification
-    if not intent:
-        intent, confidence = _classify_intent_fallback(text)
-
-    # If still no intent, skip
-    if not intent:
+    intent_result = _classify_intent(text, doc)
+    
+    if not intent_result or not intent_result[0]:
         return None
+        
+    intent, confidence, main_verb = intent_result
 
-    # Get required fields for this intent
     req = INTENT_REQUIRED_FIELDS.get(intent)
     if not req:
         return None
 
-    # Check which required fields are missing
     missing_labels = []
     for field in req['fields']:
         if not _check_field_present(field, entities, text_lower):
-            missing_labels.append(req['labels'][field])
+            label = req['labels'][field]
+            
+            # Contextual label adjustment: exact time vs general time
+            if intent in ('Meeting', 'Travel') and field == 'time' and entities['date']:
+                label = 'exact Time'
+                
+            # Contextual label adjustment: delivery verbs target recipient instead of assignee
+            if intent == 'Task' and label == 'Assignee' and main_verb in ('send', 'dispatch', 'deliver', 'forward', 'mail', 'email'):
+                label = 'Recipient'
+                
+            missing_labels.append(label)
 
     if not missing_labels:
         return None
 
     missing_str = ', '.join(missing_labels)
 
-    # Build suggestion
     suggestion_parts = [m.lower() for m in missing_labels]
     if len(suggestion_parts) > 1:
         suggestion = f"Please include {', '.join(suggestion_parts[:-1])} and {suggestion_parts[-1]}."
     else:
         suggestion = f"Please include {suggestion_parts[0]}."
 
-    return {
+    reason = None
+    if confidence == 'High':
+        act_name = intent
+        if intent == 'Travel': act_name = 'Movement'
+        
+        pres_mapped = []
+        for f in req['fields']:
+            if _check_field_present(f, entities, text_lower):
+                lbl = req['labels'][f].lower().split('/')[0]
+                if lbl == 'person': lbl = 'participant'
+                elif lbl == 'task object': lbl = 'object'
+                elif lbl == 'date time': lbl = 'date'
+                pres_mapped.append(lbl)
+                
+        # Explicit check for Date if it's not a formal requirement but present
+        if 'time' in req['fields'] and entities['date'] and not entities['time']:
+            pres_mapped.append('date')
+            
+        miss_mapped = []
+        for m in missing_labels:
+            m_lower = m.lower().split('/')[0]
+            if m_lower == 'recipient' and intent == 'Payment':
+                miss_mapped.append('payee')
+            elif m_lower == 'assignee':
+                miss_mapped.append('responsible person')
+            elif m_lower == 'deadline':
+                miss_mapped.append('due time')
+            elif m_lower == 'location':
+                if intent == 'Travel':
+                    miss_mapped.append('destination')
+                else:
+                    miss_mapped.append('place')
+            else:
+                miss_mapped.append(m_lower)
+                
+        if pres_mapped:
+            if len(pres_mapped) == 1:
+                pres_str = f"with {pres_mapped[0]} present"
+            else:
+                pres_str = f"with {pres_mapped[0]} and {pres_mapped[1]} present"
+        else:
+            pres_str = "without key details"
+            
+        if len(miss_mapped) == 1:
+            miss_str = f"no {miss_mapped[0]} found"
+        else:
+            if intent == 'Payment':
+                miss_str = f"{miss_mapped[0]} and {miss_mapped[1]} missing"
+            else:
+                miss_str = f"no {miss_mapped[0]} or {miss_mapped[1]} found"
+            
+        reason = f"{act_name} action detected {pres_str}, but {miss_str}."
+
+    res = {
         'sentence': text,
         'missing': missing_str,
         'confidence': confidence,
         'intent': intent,
         'suggestion': suggestion,
     }
+    
+    if reason:
+        res['reason'] = reason
+        
+    return res
 
 
 # ==============================================================================
@@ -514,38 +520,32 @@ def _detect_gaps_for_sentence(sentence: str) -> dict | None:
 
 def check_info_gaps(text: str) -> dict:
     """
-    Hybrid Info Gap Detection pipeline.
-
-    Multi-sentence support: analyzes each sentence independently and
-    returns all detected gaps across the entire input.
-
-    Returns: {"gaps": [{"sentence": ..., "missing": ..., ...}, ...]}
-    Compatible with existing frontend (uses g.missing and g.sentence).
+    Hybrid Info Gap Detection pipeline with Deep Semantic Action Reasoning.
     """
     if not text or not text.strip():
         return {"gaps": []}
 
-    # Split into sentences for multi-sentence analysis
     sentences = get_sentences(text)
-
-    # If only one sentence (or short text), analyze as whole
     if len(sentences) <= 1:
         sentences = [text.strip()]
 
     all_gaps = []
-    seen = set()  # Deduplicate by (sentence, missing) pair
+    seen = set()
 
     for sent in sentences:
         sent = sent.strip()
         if not sent:
             continue
 
-        gap = _detect_gaps_for_sentence(sent)
-        if gap:
-            # Rule #4: preserve all gaps, dedup by content not just sentence
-            key = (sent, gap['missing'])
-            if key not in seen:
-                seen.add(key)
-                all_gaps.append(gap)
+        # Split multi-action sentences into individual logical clauses
+        clauses = _split_clauses(sent)
+        
+        for clause in clauses:
+            gap = _detect_gaps_for_sentence(clause)
+            if gap:
+                key = (clause, gap['missing'])
+                if key not in seen:
+                    seen.add(key)
+                    all_gaps.append(gap)
 
     return {"gaps": all_gaps}
